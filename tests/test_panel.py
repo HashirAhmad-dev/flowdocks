@@ -235,7 +235,10 @@ def _panel_child():
         wait(geometry, "the private panel to map")
         control = XfcePanel()
         assert control._panels(), "no panels discovered"
-        assert control.hidden() is False, f"unexpected initial state {control.hidden()!r}"
+        # Establish a known state rather than assuming one: xfce4-panel's default
+        # autohide-behavior differs between distributions and releases.
+        assert control.set_hidden(False) == ""
+        wait(lambda: control.hidden() is False, "the panel to start visible")
 
         assert control.move("top") == ""
         wait(lambda: geometry()[1] == 0 and geometry()[2] >= 600, "a top panel")
@@ -248,7 +251,6 @@ def _panel_child():
         assert control.move("bottom") == ""
         wait(lambda: geometry()[2] >= 600, "a horizontal panel again")
 
-        # autohide-behavior does not exist yet, so this exercises the create path.
         assert control.set_hidden(True) == ""
         wait(lambda: control.hidden() is True, "the panel to report hidden")
         assert control.set_hidden(False) == ""
