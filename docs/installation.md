@@ -68,7 +68,7 @@ and produces `dist/flowdocks_<version>_all.deb` plus a SHA-256 checksum.
 | Requirement | Notes |
 | --- | --- |
 | Python 3.10 or newer | Kali Rolling and current Debian/Ubuntu all satisfy this |
-| PyQt6 6.4 or newer | `python3-pyqt6` — Debian 12 and Ubuntu 24.04 ship 6.4 |
+| PyQt6 6.4 or newer | `python3-pyqt6`. A Qt 6.4 runtime is supported and CI-verified |
 | X11 session | The supported target; see [Troubleshooting](troubleshooting.md) for Wayland |
 | `x11-utils`, `xdotool` | Running-window indicators and window activation |
 | `libglib2.0-bin` | `gio launch`, which honours desktop-entry field codes |

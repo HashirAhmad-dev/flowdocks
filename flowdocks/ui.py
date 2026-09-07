@@ -125,8 +125,9 @@ def app_icon(app: DesktopApp | None = None, name="view-app-grid") -> QIcon:
 def limit_to_one_combination(editor):
     """Cap a shortcut editor at a single combination where Qt supports it.
 
-    setMaximumSequenceLength arrived in Qt 6.5, and Debian 12 and Ubuntu 24.04
-    still ship PyQt6 6.4. Its absence only means a longer sequence can be typed;
+    setMaximumSequenceLength arrived in Qt 6.5. Ubuntu 24.04 ships PyQt6 6.6
+    bindings over a Qt 6.4 runtime, so the binding version does not tell you
+    whether it exists. Its absence only means a longer sequence can be typed;
     the parser rejects anything but one combination with a readable message.
     """
     if hasattr(editor, "setMaximumSequenceLength"):
