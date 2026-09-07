@@ -1,10 +1,15 @@
 # FlowDocks
 
-[![CI](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml/badge.svg)](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml)
+[![CI](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/badge/Release-v0.5.0-blue.svg)](https://github.com/HashirAhmad-dev/flowdocks/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41cd52.svg)](https://pypi.org/project/PyQt6/)
+
+<!-- The release badge is static because shields.io reads the public REST API,
+     which cannot see a private repository. Restore the dynamic version at
+     https://img.shields.io/github/v/release/HashirAhmad-dev/flowdocks?sort=semver
+     once this repository is public. -->
 
 An animated application dock for X11 desktops, built with PyQt6 and a Qt-free
 Python backend. Designed for Kali Linux's XFCE session and other Debian-based
