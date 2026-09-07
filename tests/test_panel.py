@@ -223,8 +223,12 @@ def _panel_child():
             time.sleep(0.2)
         raise AssertionError(f"Timed out waiting for {description}; geometry={geometry()}")
 
-    settings = subprocess.Popen(["xfsettingsd", "--sm-client-disable"],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # xfsettingsd only supplies theming, and is absent on a minimal runner, so
+    # the panel is exercised with or without it.
+    settings = None
+    if shutil.which("xfsettingsd"):
+        settings = subprocess.Popen(["xfsettingsd", "--sm-client-disable"],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     panel = subprocess.Popen(["xfce4-panel", "--disable-wm-check"],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
@@ -252,6 +256,8 @@ def _panel_child():
         print("isolated xfce4-panel: move to all four edges and hide/show verified")
     finally:
         for process in (panel, settings):
+            if process is None:
+                continue
             process.terminate()
             try:
                 process.wait(timeout=5)

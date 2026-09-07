@@ -16,7 +16,7 @@ jobs:
     name: Tests and package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install dependencies
         run: |
@@ -24,7 +24,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             python3-pyqt6 x11-utils xdotool libglib2.0-bin \
             libxcb-cursor0 libxkbcommon-x11-0 libgl1 \
-            xvfb xauth xfwm4 xfce4-panel dbus-x11 lintian
+            xvfb xauth xfwm4 xfce4-panel xfce4-settings dbus-x11 lintian
 
       - name: Report versions
         run: |
@@ -56,7 +56,7 @@ jobs:
           lintian dist/flowdocks_*.deb || true
           lintian --fail-on error dist/flowdocks_*.deb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: flowdocks-deb
           path: |
