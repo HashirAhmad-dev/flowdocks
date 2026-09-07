@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=FlowDocks
+Comment=Application dock for X11 desktops
+Exec=flowdocks
+TryExec=flowdocks
+Icon=flowdocks
+Terminal=false
+Categories=Utility;
+Keywords=dock;launcher;desktop;
+Actions=Toggle;Preferences;
+
+[Desktop Action Toggle]
+Name=Toggle Dock
+Exec=flowdocks --toggle
+
+[Desktop Action Preferences]
+Name=Preferences
+Exec=flowdocks --preferences

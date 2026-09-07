@@ -1,0 +1,89 @@
+.TH FLOWDOCKS 1 "September 2026" "FlowDocks 0.4.0" "User Commands"
+.SH NAME
+flowdocks \- application dock for X11 desktops
+.SH SYNOPSIS
+.B flowdocks
+.RB [ \-\-toggle " | " \-\-preferences ]
+.RB [ \-\-smoke-test ]
+.SH DESCRIPTION
+FlowDocks provides application shortcuts, running-window indicators and
+configurable screen-edge placement. X11 with a compositing window manager
+is the supported environment. Native Wayland integration is limited.
+Starting it again reveals the existing dock on the same display.
+.SH OPTIONS
+.TP
+.B \-\-toggle
+Send a local IPC request to show or hide the running dock.
+Start the dock if it is not running.
+.TP
+.B \-\-preferences
+Send a local IPC request to open preferences in the running dock,
+or start the dock with preferences open.
+.TP
+.B \-\-smoke-test
+Render briefly and exit without saving settings. Bypasses single-instance
+IPC and does not register the global shortcut or show a tray icon.
+.TP
+.BR \-h ", " \-\-help
+Show command-line help and exit.
+.SH CONTROLS
+Click an application to launch it or focus its running window.
+Shift-click to launch another instance. Right-click for the context menu.
+.PP
+Open the application picker with the diamond icon. Drag an application
+from the picker onto the dock to pin it. Drag dock icons to reorder them;
+drop a pinned icon outside the dock to unpin it.
+.PP
+A launcher dropped from the desktop, a file manager or the applications
+menu is matched to the installed application by path, desktop-file ID and
+Exec line, so a copy or symlink of an installed entry pins correctly. A
+launcher that is not installed is refused.
+.PP
+Drag the clock, grip or empty dock surface to move the dock. In the
+default edge positioning it snaps to the nearest screen edge; in free
+positioning it stays wherever it is dropped, including flush against an
+edge. A free dock can also be rotated between a horizontal bar and a
+vertical column; a docked one follows the edge it is attached to. Enable "Lock dock position"
+in preferences to prevent this movement; it does not lock icon editing.
+Free positioning has no screen edge, so auto-hide and the edge hotspot
+are disabled there and the dock is hidden with the shortcut, tray or menu.
+.PP
+On X11, the default global shortcut is Ctrl+Alt+A to toggle visibility.
+Enable, disable or change it in preferences. If another application owns
+the shortcut, choose another combination or bind
+.B flowdocks \-\-toggle
+in the desktop keyboard settings.
+.SH PREFERENCES
+Use the sliders icon or
+.BR "flowdocks \-\-preferences" .
+Screen layer choices are normal, above other windows, and below other
+windows. Revealing temporarily raises the dock until the pointer leaves;
+the window manager controls final stacking behavior.
+.PP
+Edge action choices are reveal, toggle and off. Hover briefly at the
+dock's screen edge to trigger the configured action, then leave the edge
+to rearm it. Auto-hide is configured separately. Preferences also include
+screen and edge selection, appearance, the global shortcut, position lock
+and optional user-controlled login autostart.
+.SH DESKTOP PANEL
+The context menu and preferences can hide, show, move and open the
+settings of the desktop's own panel. XFCE panels are changed through
+.BR xfconf-query ,
+MATE and Cinnamon panels through their GSettings keys. LXQt, KDE, GNOME
+and Budgie offer only their panel settings dialog, because their panels
+cannot be hidden or moved reliably from the command line. Actions a
+desktop does not support are shown greyed out with the reason. FlowDocks
+changes only the current user's panel configuration and never runs as root.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/flowdocks/settings.json
+User preferences; defaults to
+.I ~/.config/flowdocks/settings.json
+when XDG_CONFIG_HOME is unset.
+.TP
+.I /usr/share/doc/flowdocks/README.md
+Additional usage and desktop requirements.
+.SH AUTHOR
+Written by Hashir Ahmad.
+.SH COPYRIGHT
+Copyright \(co 2026 Hashir Ahmad. Licensed under the MIT License.

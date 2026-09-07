@@ -1,0 +1,54 @@
+flowdocks (0.4.0) unstable; urgency=medium
+
+  * Let a free-positioned dock reach the screen edges. Free positioning now
+    places the visible shelf rather than its padded window, and moves that
+    padding to whichever side has room, so the dock sits flush against an edge
+    instead of stopping a tooltip's height short of it.
+  * Add a horizontal/vertical orientation setting for free positioning, so the
+    dock can be rotated into a column. A docked dock still takes its orientation
+    from the edge it is attached to.
+  * Replace the combo box arrows in preferences with a painted chevron, and
+    restyle the drop-down lists to match the rest of the dialog.
+
+ -- Hashir Ahmad <hashirahmad8055@gmail.com>  Mon, 07 Sep 2026 22:30:00 +0000
+
+flowdocks (0.3.0) unstable; urgency=medium
+
+  * Rename the project to FlowDocks. The package, command, icon, manual page and
+    configuration directory all move to that name; settings and pinned apps are
+    read once from the previous configuration directory so nothing is lost.
+  * Accept an application dropped from the desktop, the file manager or the
+    applications menu. A dropped launcher is matched to the installed app by
+    path, desktop-file ID and finally its Exec line, so a copy or symlink of an
+    installed entry now pins correctly instead of being rejected.
+  * Add a free positioning mode: the dock can be dragged anywhere on the screen
+    instead of only snapping to an edge. Auto-hide and the edge hotspot are
+    disabled in that mode, leaving the shortcut, tray and menu to hide it.
+  * Add controls for the desktop's own panel, in the menu and in preferences:
+    hide or show it, move it to any edge, and open its settings. XFCE is driven
+    through xfconf; MATE and Cinnamon through their GSettings keys; LXQt, KDE,
+    GNOME and Budgie offer their settings dialog only. Unsupported actions are
+    greyed out and explained rather than failing silently.
+
+ -- Hashir Ahmad <hashirahmad8055@gmail.com>  Mon, 07 Sep 2026 21:00:00 +0000
+
+flowdocks (0.2.0) unstable; urgency=medium
+
+  * Released under the project's former name.
+  * Default to the normal window layer so other windows can cover the dock, and
+    add Above and Below layer choices in preferences and the context menu.
+  * Add a global show/hide shortcut (Ctrl+Alt+A by default), configurable or
+    disabled in preferences, plus --toggle and --preferences commands that talk
+    to the running dock over a per-user, per-display socket.
+  * Make the screen edge hotspot configurable: reveal, toggle or disabled.
+  * Allow dragging icons from the application picker onto the dock, dragging
+    pinned icons to reorder them, and dragging an icon off the dock to unpin it.
+  * Allow dragging the dock itself by its grip, clock or empty surface to
+    snap it to any screen edge on any monitor, with an optional position lock.
+  * Add a no-root, architecture-independent Debian package with an explicit
+    runtime file list, desktop actions, scalable icon, manual page and local
+    documentation.
+  * Record unspecified project licensing; public distribution requires the
+    owner's confirmation of distribution rights.
+
+ -- Hashir Ahmad <hashirahmad8055@gmail.com>  Mon, 07 Sep 2026 00:00:00 +0000
