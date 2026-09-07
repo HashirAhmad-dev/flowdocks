@@ -5,13 +5,15 @@ All notable changes to FlowDocks are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html). The packaged Debian
 changelog at `packaging/changelog` carries the same history.
 
-## [Unreleased]
+## [0.6.0] - 2026-09-08
 
 ### Changed
 - Relicensed from MIT to a proprietary all-rights-reserved licence. The source
   remains published to be read, but no right to use, copy, modify or
   redistribute it is granted. Installing and running an official release is
-  permitted for personal use.
+  permitted for personal use. Contributing and installation guidance was
+  reconciled with the new terms, and the v0.4.0 and v0.5.0 releases, which were
+  published under MIT, were withdrawn.
 
 ## [0.5.0] - 2026-09-07
 
@@ -101,6 +103,7 @@ Released under the project's former name.
 Initial version: a translucent animated dock with application discovery,
 pinned shortcuts, running-window indicators, preferences and optional autostart.
 
+[0.6.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.6.0
 [0.5.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.5.0
 [0.4.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.4.0
 [0.3.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.3.0

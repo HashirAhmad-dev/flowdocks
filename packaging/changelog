@@ -1,3 +1,13 @@
+flowdocks (0.6.0) unstable; urgency=medium
+
+  * Relicense from MIT to a proprietary all-rights-reserved licence. The source
+    remains published to be read, but no right to use, copy, modify or
+    redistribute it is granted; installing and running an official release
+    stays permitted for personal use.
+  * Reconcile the contributing and installation guidance with the new terms.
+
+ -- PrismoVector <info@prismovector.com>  Tue, 08 Sep 2026 09:00:00 +0000
+
 flowdocks (0.5.0) unstable; urgency=medium
 
   * Add separators. A pinned slot can hold a divider instead of an application,
@@ -13,7 +23,7 @@ flowdocks (0.5.0) unstable; urgency=medium
 
  -- PrismoVector <info@prismovector.com>  Mon, 07 Sep 2026 23:55:00 +0000
 
-flowdocks (0.5.0) unstable; urgency=medium
+flowdocks (0.4.0) unstable; urgency=medium
 
   * Let a free-positioned dock reach the screen edges. Free positioning now
     places the visible shelf rather than its padded window, and moves that

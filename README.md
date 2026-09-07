@@ -71,7 +71,7 @@ Download the `.deb` from the
 [releases page](https://github.com/HashirAhmad-dev/flowdocks/releases):
 
 ```bash
-sudo apt install ./flowdocks_0.5.0_all.deb
+sudo apt install ./flowdocks_0.6.0_all.deb
 flowdocks
 ```
 

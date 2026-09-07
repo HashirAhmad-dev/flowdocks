@@ -9,7 +9,7 @@ Download `flowdocks_<version>_all.deb` from the
 [releases page](https://github.com/HashirAhmad-dev/flowdocks/releases), then:
 
 ```bash
-sudo apt install ./flowdocks_0.5.0_all.deb
+sudo apt install ./flowdocks_0.6.0_all.deb
 flowdocks
 ```
 
@@ -28,7 +28,7 @@ Installing enables no autostart and changes no desktop panel. Verify the downloa
 first if you like:
 
 ```bash
-sha256sum --check flowdocks_0.5.0_all.deb.sha256
+sha256sum --check flowdocks_0.6.0_all.deb.sha256
 ```
 
 Uninstall with `sudo apt remove flowdocks`. Your settings stay in your home
