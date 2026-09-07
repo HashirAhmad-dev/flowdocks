@@ -7,7 +7,7 @@ name = "flowdocks"
 version = "0.5.0"
 description = "An animated PyQt6 application dock for Linux desktops"
 requires-python = ">=3.10"
-license = "MIT"
+license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]
 readme = "README.md"
 authors = [{ name = "PrismoVector", email = "info@prismovector.com" }]
@@ -15,7 +15,7 @@ keywords = ["dock", "launcher", "desktop", "x11", "pyqt6", "linux"]
 classifiers = [
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Desktop Environment",

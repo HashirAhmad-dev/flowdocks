@@ -1,7 +1,17 @@
 # Contributing to FlowDocks
 
-Thanks for taking an interest. This document covers how to set the project up,
-how it is laid out, and what the tests expect of a change.
+FlowDocks is proprietary software, not open source. The source is published to
+be read, and this document exists for PrismoVector and anyone it has authorised
+to work on the project.
+
+**Before contributing:** unsolicited pull requests are not accepted. If you
+would like to contribute, contact info@prismovector.com first. Any contribution
+that is accepted must be assigned to PrismoVector, which holds the copyright in
+the whole work. Nothing here grants a right to use, copy, modify or redistribute
+the software — see [LICENSE](LICENSE).
+
+Bug reports and feature requests are welcome from anyone, through
+[issues](https://github.com/HashirAhmad-dev/flowdocks/issues).
 
 ## Development setup
 

@@ -36,6 +36,10 @@ directory; remove `~/.config/flowdocks/` to clear them.
 
 ## From source
 
+Running from source is for PrismoVector and its licensees; the published source
+carries no right to use or redistribute it. See [LICENSE](../LICENSE). To simply
+use FlowDocks, install the release package above.
+
 ```bash
 sudo apt install python3-pyqt6 x11-utils xdotool libglib2.0-bin papirus-icon-theme
 git clone https://github.com/HashirAhmad-dev/flowdocks.git

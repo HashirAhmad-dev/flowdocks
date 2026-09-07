@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/badge/Release-v0.5.0-blue.svg)](https://github.com/HashirAhmad-dev/flowdocks/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41cd52.svg)](https://pypi.org/project/PyQt6/)
 
@@ -169,4 +169,10 @@ compositor — see [Troubleshooting](docs/troubleshooting.md#wayland).
 
 ## License
 
-Released under the [MIT License](LICENSE). Copyright © 2026 PrismoVector.
+Copyright © 2026 PrismoVector. **All rights reserved.**
+
+FlowDocks is proprietary software, not open source. The source is published
+here to be read, not reused: no right to use, copy, modify, redistribute or
+publish it is granted. Installing and running an official release is permitted
+for personal use; redistributing it is not. See [LICENSE](LICENSE) for the full
+terms, or contact info@prismovector.com for licensing enquiries.

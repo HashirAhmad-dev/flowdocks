@@ -5,6 +5,14 @@ All notable changes to FlowDocks are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html). The packaged Debian
 changelog at `packaging/changelog` carries the same history.
 
+## [Unreleased]
+
+### Changed
+- Relicensed from MIT to a proprietary all-rights-reserved licence. The source
+  remains published to be read, but no right to use, copy, modify or
+  redistribute it is granted. Installing and running an official release is
+  permitted for personal use.
+
 ## [0.5.0] - 2026-09-07
 
 ### Added

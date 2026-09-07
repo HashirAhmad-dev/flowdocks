@@ -1,16 +1,25 @@
-MIT License
+FlowDocks
 
-Copyright (c) 2026 PrismoVector
+Copyright (c) 2026 PrismoVector. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software and its source code are the proprietary property of PrismoVector.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+No licence or right is granted to any person to use, copy, reproduce, modify,
+merge, adapt, translate, publish, distribute, sublicense, sell, or create
+derivative works of this software or any part of it, whether in source or
+binary form, except under a separate written agreement signed by PrismoVector.
+
+Where this repository is hosted publicly, viewing and forking through the
+hosting provider's own interface is permitted only to the extent required by
+that provider's terms of service. No such act grants any further right, and in
+particular grants no right to use, run, redistribute or publish this software,
+or any derivative of it, outside that interface.
+
+Installing and running an official binary distribution supplied by PrismoVector
+is permitted for personal use. Redistributing that binary is not.
+
+Third-party components retain their own licences and are not covered by this
+notice.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -19,3 +28,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+For licensing enquiries, contact info@prismovector.com.

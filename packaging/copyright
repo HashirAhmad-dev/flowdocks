@@ -4,18 +4,26 @@ Source: https://github.com/HashirAhmad-dev/flowdocks
 
 Files: *
 Copyright: 2026 PrismoVector
-License: MIT
+License: LicenseRef-Proprietary
 
-License: MIT
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
+License: LicenseRef-Proprietary
+ All rights reserved.
  .
- The above copyright notice and this permission notice shall be included in all
- copies or substantial portions of the Software.
+ This software and its source code are the proprietary property of
+ PrismoVector.
+ .
+ No licence or right is granted to any person to use, copy, reproduce, modify,
+ merge, adapt, translate, publish, distribute, sublicense, sell, or create
+ derivative works of this software or any part of it, whether in source or
+ binary form, except under a separate written agreement signed by
+ PrismoVector.
+ .
+ Installing and running an official binary distribution supplied by
+ PrismoVector is permitted for personal use. Redistributing that binary is
+ not.
+ .
+ Third-party components retain their own licences and are not covered by this
+ notice.
  .
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,3 +32,5 @@ License: MIT
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
+ .
+ For licensing enquiries, contact info@prismovector.com.
