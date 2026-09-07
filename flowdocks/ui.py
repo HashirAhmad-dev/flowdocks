@@ -122,6 +122,17 @@ def app_icon(app: DesktopApp | None = None, name="view-app-grid") -> QIcon:
     return QIcon(pixmap)
 
 
+def limit_to_one_combination(editor):
+    """Cap a shortcut editor at a single combination where Qt supports it.
+
+    setMaximumSequenceLength arrived in Qt 6.5, and Debian 12 and Ubuntu 24.04
+    still ship PyQt6 6.4. Its absence only means a longer sequence can be typed;
+    the parser rejects anything but one combination with a readable message.
+    """
+    if hasattr(editor, "setMaximumSequenceLength"):
+        editor.setMaximumSequenceLength(1)
+
+
 def label(text, heading=False, muted=False):
     widget = QLabel(text)
     widget.setProperty("heading", heading)
@@ -332,7 +343,7 @@ class SettingsDialog(QDialog):
         self.edge_action.setCurrentIndex(self.edge_action.findData(settings["edge_action"]))
         form.addRow("Edge action", self.edge_action)
         self.shortcut = QKeySequenceEdit(QKeySequence(settings["shortcut"]))
-        self.shortcut.setMaximumSequenceLength(1)
+        limit_to_one_combination(self.shortcut)
         form.addRow("Toggle shortcut", self.shortcut)
         self.size = self.slider(form, "Icon size", 32, 80, settings["icon_size"], " px")
         self.zoom = self.slider(form, "Hover zoom", 100, 200, round(settings["magnification"] * 100), "%")

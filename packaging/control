@@ -4,7 +4,7 @@ Section: utils
 Priority: optional
 Architecture: all
 Maintainer: Hashir Ahmad <hashirahmad8055@gmail.com>
-Depends: python3 (>= 3.10), python3-pyqt6 (>= 6.6), libx11-6, x11-utils, xdotool, libglib2.0-bin
+Depends: python3 (>= 3.10), python3-pyqt6 (>= 6.4), libx11-6, x11-utils, xdotool, libglib2.0-bin
 Recommends: papirus-icon-theme
 Description: animated application dock for X11 desktops
  A PyQt6 desktop dock with application shortcuts, running-window indicators,

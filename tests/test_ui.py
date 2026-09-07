@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import QApplication, QMenu
 
 from flowdocks import panel
 from flowdocks.backend import DesktopApp, SettingsStore, WindowInfo
-from flowdocks.ui import APP_MIME, AppPicker, Dock, SettingsDialog
+from flowdocks.ui import APP_MIME, AppPicker, Dock, SettingsDialog, limit_to_one_combination
 
 
 class DockTests(unittest.TestCase):
@@ -428,6 +428,27 @@ class DockTests(unittest.TestCase):
             self.dock.pool.waitForDone()
             self.qt.processEvents()
             error.assert_called_once()
+
+    def test_shortcut_editor_tolerates_pyqt_without_the_qt65_api(self):
+        # setMaximumSequenceLength arrived in Qt 6.5; Debian 12 and Ubuntu 24.04
+        # ship PyQt6 6.4, where calling it unconditionally broke preferences.
+        class Older:
+            pass
+
+        class Newer:
+            def __init__(self):
+                self.limit = None
+
+            def setMaximumSequenceLength(self, value):
+                self.limit = value
+
+        limit_to_one_combination(Older())
+        newer = Newer()
+        limit_to_one_combination(newer)
+        self.assertEqual(newer.limit, 1)
+        settings = SettingsDialog(self.dock)
+        self.addCleanup(settings.deleteLater)
+        self.assertTrue(settings.shortcut.keySequence().toString())
 
     def test_dialog_lifecycle(self):
         self.dock.open_picker()

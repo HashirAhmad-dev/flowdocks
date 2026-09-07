@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Desktop Environment",
 ]
-dependencies = ["PyQt6>=6.6,<7"]
+dependencies = ["PyQt6>=6.4,<7"]
 
 [project.scripts]
 flowdocks = "flowdocks.app:main"

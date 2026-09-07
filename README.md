@@ -144,7 +144,7 @@ and driving the whole application with real pointer drags. They need `xvfb`,
 | Requirement | Notes |
 | --- | --- |
 | Python 3.10+ | Satisfied by current Kali, Debian and Ubuntu |
-| PyQt6 6.6+ | `python3-pyqt6` |
+| PyQt6 6.4+ | `python3-pyqt6` |
 | X11 session | The supported target; Wayland support is limited |
 | `x11-utils`, `xdotool` | Window indicators and activation |
 | `libglib2.0-bin` | `gio launch`, honouring desktop-entry field codes |

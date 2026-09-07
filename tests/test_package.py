@@ -48,7 +48,7 @@ class PackageTests(unittest.TestCase):
                 ("Version", "0.4.0"),
                 ("Architecture", "all"),
                 ("Maintainer", "Hashir Ahmad <hashirahmad8055@gmail.com>"),
-                ("Depends", "python3 (>= 3.10), python3-pyqt6 (>= 6.6), libx11-6, x11-utils, xdotool, libglib2.0-bin"),
+                ("Depends", "python3 (>= 3.10), python3-pyqt6 (>= 6.4), libx11-6, x11-utils, xdotool, libglib2.0-bin"),
                 ("Recommends", "papirus-icon-theme"),
             ):
                 result = subprocess.check_output(["dpkg-deb", "-f", str(package), field], text=True)
