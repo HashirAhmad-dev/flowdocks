@@ -8,7 +8,38 @@ because it is plain JSON and occasionally handy to edit or copy between machines
 Writes are atomic, so an interrupted save cannot leave a half-written file, and a
 read-only home is tolerated rather than fatal.
 
-## Keys
+## Shape
+
+The file holds a list of docks with the shared settings beside it:
+
+```json
+{
+  "shortcut": "Ctrl+Alt+A",
+  "shortcut_enabled": true,
+  "docks": [
+    { "position": "bottom", "theme": "midnight", "pinned": ["firefox.desktop", "|", "thunar.desktop"] },
+    { "position": "top", "theme": "graphite", "pinned": ["code.desktop"] }
+  ]
+}
+```
+
+Up to five docks are supported. Each is fully independent; the only shared
+settings are the two shortcut keys, because a single key grab serves them all.
+
+A `"|"` in `pinned` is a separator rather than an application. Several may
+appear, and FlowDocks addresses them by position, so identical ones stay
+distinct when you move or remove one.
+
+## Shared keys
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `shortcut_enabled` | bool | `true` | Whether to grab the global shortcut |
+| `shortcut` | string | `"Ctrl+Alt+A"` | One modified key combination |
+
+## Per-dock keys
+
+Each entry in `docks` accepts these:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -17,7 +48,7 @@ read-only home is tolerated rather than fatal.
 | `magnification` | float 1.0–3.0 | `1.55` | Hover zoom factor |
 | `opacity` | int 20–100 | `92` | Surface opacity, as a percentage |
 | `screen` | int | `0` | Monitor index |
-| `pinned` | list of strings | picked on first run | Desktop-file IDs, in dock order |
+| `pinned` | list of strings | picked on first run | Desktop-file IDs in dock order; `"|"` is a separator |
 | `layer` | string | `"normal"` | `normal`, `above` or `below` |
 | `move_mode` | string | `"edge"` | `edge` snaps to a screen edge, `free` floats |
 | `position` | string | `"bottom"` | Edge used by `move_mode: edge` |
@@ -28,17 +59,22 @@ read-only home is tolerated rather than fatal.
 | `lock_position` | bool | `false` | Prevents dragging the dock |
 | `auto_hide` | bool | `false` | Hide shortly after the pointer leaves |
 | `edge_action` | string | `"reveal"` | `reveal`, `toggle` or `off` |
-| `shortcut_enabled` | bool | `true` | Whether to grab the global shortcut |
-| `shortcut` | string | `"Ctrl+Alt+A"` | One modified key combination |
 
 Every value is validated on load. Anything missing, out of range or of the wrong
 type falls back to its default, so a corrupt or hand-edited file cannot stop the
-dock from starting. Restart FlowDocks after editing the file by hand — the
-running dock rewrites it from memory when you change something.
+dock from starting. A missing, empty or malformed `docks` list yields one
+default dock, and a list longer than five is trimmed. Restart FlowDocks after
+editing the file by hand — a running dock rewrites it from memory when you
+change something.
 
-## Upgrading from the previous name
+## Upgrading
 
-The project was formerly published under a different name. On first run, if
+A settings file written before multiple docks existed holds one dock's keys at
+the top level. FlowDocks reads such a file as a single dock and lifts the
+shortcut out of it, so your pins and layout survive untouched. The next save
+rewrites the file in the current shape.
+
+The project was also formerly published under a different name. On first run, if
 `~/.config/flowdocks/settings.json` does not exist, FlowDocks reads
 `~/.config/nexus-dock/settings.json` once and carries over your settings and
 pinned applications. The old file is left in place as a fallback and is never

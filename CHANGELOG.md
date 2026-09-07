@@ -5,6 +5,27 @@ All notable changes to FlowDocks are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html). The packaged Debian
 changelog at `packaging/changelog` carries the same history.
 
+## [0.5.0] - 2026-09-07
+
+### Added
+- Separators. A pinned slot can hold a divider instead of an application, so
+  icons can be grouped the way Nexus Dock does. Add one from the dock menu, drag
+  it to reposition it, and drag it off the dock or use its menu to remove it.
+  Separators are addressed by position, so several identical ones stay distinct.
+- Up to five docks at once. Each keeps its own pinned apps, edge, orientation,
+  theme, size and layer, and is added or removed from the Docks submenu. The
+  global shortcut and the `--toggle` and `--preferences` commands act on all of
+  them together.
+
+### Changed
+- The settings file now holds a `docks` list with the shortcut beside it. A file
+  written by an earlier version is read as a single dock and its shortcut lifted
+  out, so nothing is lost on upgrade.
+
+### Fixed
+- A dock discarded at runtime now stops its animation timer before deletion,
+  rather than ticking against a half-torn-down widget.
+
 ## [0.4.0] - 2026-09-07
 
 ### Added
@@ -72,6 +93,7 @@ Released under the project's former name.
 Initial version: a translucent animated dock with application discovery,
 pinned shortcuts, running-window indicators, preferences and optional autostart.
 
+[0.5.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.5.0
 [0.4.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.4.0
 [0.3.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.2.0

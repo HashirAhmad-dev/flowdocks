@@ -36,7 +36,7 @@ class WindowInfo:
     pid: int = 0
 
 
-DEFAULT_SETTINGS = {
+DEFAULT_DOCK = {
     "icon_size": 52,
     "magnification": 1.55,
     "auto_hide": False,
@@ -47,8 +47,6 @@ DEFAULT_SETTINGS = {
     "pinned": [],
     "layer": "normal",
     "edge_action": "reveal",
-    "shortcut_enabled": True,
-    "shortcut": "Ctrl+Alt+A",
     "alignment": 0.5,
     "lock_position": False,
     "move_mode": "edge",
@@ -56,6 +54,19 @@ DEFAULT_SETTINGS = {
     "free_y": 0.82,
     "orientation": "horizontal",
 }
+
+# One key grab serves every dock, so the shortcut lives above them.
+DEFAULT_GLOBAL = {
+    "shortcut_enabled": True,
+    "shortcut": "Ctrl+Alt+A",
+}
+
+MAX_DOCKS = 5
+
+# A pinned slot holding this instead of a desktop-file ID draws a divider. No
+# desktop ID can collide with it, and several may appear in one dock, so pinned
+# slots are addressed by position rather than by value.
+SEPARATOR = "|"
 
 # Settings are read from here once if the current directory has none, so an
 # upgrade from the pre-rename releases keeps the user's pins and layout.
@@ -379,8 +390,8 @@ def resolve_dropped_desktops(paths, apps: list[DesktopApp]) -> list[DesktopApp]:
     return found
 
 
-def _validated_settings(values: dict) -> dict:
-    data = {**DEFAULT_SETTINGS, "pinned": []}
+def _validated_dock(values: dict) -> dict:
+    data = {**DEFAULT_DOCK, "pinned": []}
     for key, value in values.items():
         valid = False
         if key in ("icon_size", "opacity", "screen") and type(value) is int:
@@ -388,7 +399,7 @@ def _validated_settings(values: dict) -> dict:
             valid = low <= value <= high
         elif key == "magnification" and type(value) in (int, float):
             valid = 1.0 <= value <= 3.0
-        elif key in ("auto_hide", "shortcut_enabled", "lock_position"):
+        elif key in ("auto_hide", "lock_position"):
             valid = type(value) is bool
         elif key in ("alignment", "free_x", "free_y") and type(value) in (int, float):
             valid = 0 <= value <= 1
@@ -400,8 +411,6 @@ def _validated_settings(values: dict) -> dict:
             valid = isinstance(value, str) and value in ("normal", "above", "below")
         elif key == "edge_action":
             valid = isinstance(value, str) and value in ("off", "reveal", "toggle")
-        elif key == "shortcut":
-            valid = isinstance(value, str) and 0 < len(value) <= 80 and not any(ord(c) < 32 for c in value)
         elif key == "position":
             valid = isinstance(value, str) and value in ("bottom", "top", "left", "right")
         elif key == "theme":
@@ -441,6 +450,51 @@ def _read_settings(path: Path) -> dict | None:
     return loaded if isinstance(loaded, dict) else None
 
 
+def _dock_sources(values: dict) -> list[dict]:
+    """The per-dock mappings in a settings file, whatever its vintage.
+
+    Files written before multiple docks existed hold one dock's keys at the top
+    level, so such a file reads back as a single dock.
+    """
+    docks = values.get("docks")
+    if isinstance(docks, list) and docks:
+        return [dock for dock in docks if isinstance(dock, dict)][:MAX_DOCKS] or [{}]
+    return [values] if values else [{}]
+
+
+def _validated_root(values: dict) -> dict:
+    data = {**DEFAULT_GLOBAL}
+    if type(values.get("shortcut_enabled")) is bool:
+        data["shortcut_enabled"] = values["shortcut_enabled"]
+    shortcut = values.get("shortcut")
+    if isinstance(shortcut, str) and 0 < len(shortcut) <= 80 and not any(ord(c) < 32 for c in shortcut):
+        data["shortcut"] = shortcut
+    data["docks"] = [_validated_dock(dock) for dock in _dock_sources(values)]
+    return data
+
+
+class DockSettings:
+    """One dock's slice of the shared settings file.
+
+    Docks read and write settings through this, so a dock never needs to know
+    which of several it is, nor that the globals sit beside it.
+    """
+
+    def __init__(self, store: "SettingsStore", index: int):
+        self.store, self.index = store, index
+
+    @property
+    def data(self) -> dict:
+        return self.store.data["docks"][self.index]
+
+    @property
+    def globals(self) -> dict:
+        return self.store.data
+
+    def save(self) -> None:
+        self.store.save()
+
+
 class SettingsStore:
     def __init__(self, config_dir: Path | None = None):
         config = _xdg_home("XDG_CONFIG_HOME", ".config")
@@ -449,14 +503,41 @@ class SettingsStore:
         if values is None and config_dir is None:
             # Read the old location without touching it; the first save moves forward.
             values = _read_settings(config / LEGACY_CONFIG_DIR / "settings.json")
-        self.data = _validated_settings(values or {})
-        if values is None or "pinned" not in values:
-            self.data["pinned"] = pick_default_pins(discover_apps())
+        self.data = _validated_root(values or {})
+        if "pinned" not in _dock_sources(values or {})[0]:
+            self.data["docks"][0]["pinned"] = pick_default_pins(discover_apps())
+
+    def count(self) -> int:
+        return len(self.data["docks"])
+
+    def dock(self, index: int) -> DockSettings:
+        return DockSettings(self, index)
+
+    def add_dock(self) -> int | None:
+        """Append a dock, or return None once MAX_DOCKS are configured."""
+        if self.count() >= MAX_DOCKS:
+            return None
+        new = _validated_dock({})
+        # Start it on a free edge so it does not land exactly on an existing dock.
+        taken = {dock["position"] for dock in self.data["docks"] if dock["move_mode"] == "edge"}
+        new["position"] = next((edge for edge in ("bottom", "top", "left", "right")
+                                if edge not in taken), "bottom")
+        self.data["docks"].append(new)
+        self.save()
+        return self.count() - 1
+
+    def remove_dock(self, index: int) -> bool:
+        """Remove a dock, refusing to leave the user with none."""
+        if self.count() <= 1 or not 0 <= index < self.count():
+            return False
+        self.data["docks"].pop(index)
+        self.save()
+        return True
 
     def save(self) -> None:
         """Persist validated settings atomically; read-only homes are tolerated."""
         try:
-            self.data = _validated_settings(self.data)
+            self.data = _validated_root(self.data)
             _atomic_write(self.path, json.dumps(self.data, indent=2, allow_nan=False) + "\n")
         except (OSError, ValueError, TypeError):
             pass

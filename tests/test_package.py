@@ -42,10 +42,10 @@ class PackageTests(unittest.TestCase):
                 ["sh", str(project / "scripts/build-deb.sh")],
                 cwd=temporary, check=True, capture_output=True, text=True,
             )
-            package = project / "dist/flowdocks_0.4.0_all.deb"
+            package = project / "dist/flowdocks_0.5.0_all.deb"
             for field, expected in (
                 ("Package", "flowdocks"),
-                ("Version", "0.4.0"),
+                ("Version", "0.5.0"),
                 ("Architecture", "all"),
                 ("Maintainer", "PrismoVector <info@prismovector.com>"),
                 ("Depends", "python3 (>= 3.10), python3-pyqt6 (>= 6.4), libx11-6, x11-utils, xdotool, libglib2.0-bin"),

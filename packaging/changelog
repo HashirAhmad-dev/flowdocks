@@ -1,4 +1,19 @@
-flowdocks (0.4.0) unstable; urgency=medium
+flowdocks (0.5.0) unstable; urgency=medium
+
+  * Add separators. A pinned slot can hold a divider instead of an application,
+    grouping icons the way Nexus Dock does. Add one from the dock menu, drag it
+    to reposition it, and drag it off the dock or use its menu to remove it.
+    Separators are addressed by position, so identical ones stay distinct.
+  * Support up to five docks at once. Each keeps its own pinned apps, edge,
+    orientation, theme, size and layer, and is added or removed from the Docks
+    submenu. The global shortcut and the --toggle and --preferences commands
+    act on all of them together.
+  * Settings files written by earlier versions are read as a single dock, and
+    the shortcut is lifted out of it, so nothing is lost on upgrade.
+
+ -- PrismoVector <info@prismovector.com>  Mon, 07 Sep 2026 23:55:00 +0000
+
+flowdocks (0.5.0) unstable; urgency=medium
 
   * Let a free-positioned dock reach the screen edges. Free positioning now
     places the visible shelf rather than its padded window, and moves that

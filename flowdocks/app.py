@@ -12,7 +12,7 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication
 
 from .backend import SettingsStore
-from .ui import Dock
+from .ui import DockManager
 
 
 def main(argv=None):
@@ -62,7 +62,7 @@ def main(argv=None):
         print("The running dock did not respond. Quit the older instance and restart FlowDocks.", file=sys.stderr)
         return 1
 
-    dock = Dock(SettingsStore(), smoke_test=args.smoke_test)
+    manager = DockManager(SettingsStore(), smoke_test=args.smoke_test)
     server = QLocalServer(app)
     clients = set()
 
@@ -73,11 +73,11 @@ def main(argv=None):
             return
         message = bytes(client.readLine(64)).strip()
         if message == b"toggle":
-            dock.toggle_visibility()
+            manager.toggle_all()
         elif message == b"preferences":
-            dock.open_settings()
+            manager.open_preferences()
         elif message == b"show":
-            dock.reveal()
+            manager.reveal_all()
         else:
             client.disconnectFromServer()
             return
@@ -108,15 +108,15 @@ def main(argv=None):
             # the dock itself still works through the mouse, tray and shortcut.
             print(f"FlowDocks: --toggle and --preferences are unavailable "
                   f"({server.errorString()}).", file=sys.stderr)
-    dock.show()
+    for dock in manager.docks:
+        dock.show()
     if args.preferences:
-        QTimer.singleShot(0, dock.open_settings)
+        QTimer.singleShot(0, manager.open_preferences)
     if args.smoke_test:
         QTimer.singleShot(1200, app.quit)
     result = app.exec()
     server.close()
-    dock.global_shortcut.close()
-    dock.pool.waitForDone(10000)
+    manager.close()
     return result
 
 

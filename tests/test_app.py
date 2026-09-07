@@ -319,6 +319,24 @@ def _integration_suite():
             self.command("xdotool", "key", "--clearmodifiers", "ctrl+alt+a")
             self.wait_visible(False)
 
+        def test_multiple_docks_start_and_toggle_together(self):
+            self.settings.write_text(json.dumps({"docks": [
+                {"position": "bottom", "pinned": ["firefox.desktop"]},
+                {"position": "top", "pinned": ["terminal.desktop"]},
+                {"position": "left", "pinned": ["firefox.desktop", "|", "terminal.desktop"]},
+            ]}), encoding="utf-8")
+            self.app = subprocess.Popen(
+                [sys.executable, str(ROOT / "main.py")], cwd=ROOT, env=self.environment,
+                stdin=subprocess.DEVNULL, stdout=self.log, stderr=subprocess.STDOUT)
+            self.addCleanup(_stop, self.app)
+            self.wait_for(lambda: len(self.windows(visible=True)) == 3, "three visible docks")
+            # One key grab serves them all.
+            self.command("xdotool", "key", "--clearmodifiers", "ctrl+alt+a")
+            self.wait_for(lambda: not self.windows(visible=True), "every dock hidden at once")
+            self.command("xdotool", "key", "--clearmodifiers", "ctrl+alt+a")
+            self.wait_for(lambda: len(self.windows(visible=True)) == 3, "every dock revealed again")
+            self.assertIsNone(self.app.poll())
+
         def icon_center(self, index):
             geometry = self.command("xdotool", "getwindowgeometry", "--shell", self.window).stdout
             values = dict(line.split("=", 1) for line in geometry.splitlines() if "=" in line)
@@ -339,9 +357,12 @@ def _integration_suite():
             finally:
                 self.command("xdotool", "mouseup", "1")
 
-        def saved(self, key, value):
-            self.wait_for(lambda: json.loads(self.settings.read_text(encoding="utf-8")).get(key) == value,
-                          f"persisted {key}={value!r}")
+        def saved(self, key, value, dock=0):
+            # Settings are written as a list of docks; these cases use the first.
+            def stored():
+                data = json.loads(self.settings.read_text(encoding="utf-8"))
+                return data.get("docks", [{}])[dock].get(key)
+            self.wait_for(lambda: stored() == value, f"persisted {key}={value!r}")
 
         def test_clock_drag_persists_left_edge(self):
             self.start(settings={"pinned": ["firefox.desktop", "terminal.desktop"],

@@ -15,8 +15,8 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMenu
 
 from flowdocks import panel
-from flowdocks.backend import DesktopApp, SettingsStore, WindowInfo
-from flowdocks.ui import APP_MIME, AppPicker, Dock, SettingsDialog, limit_to_one_combination
+from flowdocks.backend import MAX_DOCKS, SEPARATOR, DesktopApp, SettingsStore, WindowInfo
+from flowdocks.ui import APP_MIME, DockManager, AppPicker, Dock, SettingsDialog, limit_to_one_combination
 
 
 class DockTests(unittest.TestCase):
@@ -34,10 +34,11 @@ class DockTests(unittest.TestCase):
             DesktopApp("editor.desktop", "Editor", "editor"),
         ]
         self.store = SettingsStore(Path(self.directory.name))
-        self.store.data["pinned"] = [app.id for app in self.apps[:2]]
-        self.store.data["icon_size"] = 48
+        self.settings = self.store.dock(0)
+        self.settings.data["pinned"] = [app.id for app in self.apps[:2]]
+        self.settings.data["icon_size"] = 48
         with patch("flowdocks.ui.discover_apps", return_value=self.apps), patch.object(Dock, "poll_windows"):
-            self.dock = Dock(self.store, smoke_test=True)
+            self.dock = Dock(self.settings, smoke_test=True)
         self.dock.timer.stop()
         self.dock.poll_timer.stop()
         self.dock.show()
@@ -56,7 +57,7 @@ class DockTests(unittest.TestCase):
         for edge in ("bottom", "top", "left", "right"):
             for theme in ("midnight", "graphite", "aurora"):
                 with self.subTest(edge=edge, theme=theme):
-                    self.store.data.update(position=edge, theme=theme)
+                    self.settings.data.update(position=edge, theme=theme)
                     self.dock.rebuild()
                     self.assertTrue(self.dock.selected_screen().geometry().contains(self.dock.geometry()))
                     self.assertFalse(self.dock.grab().isNull())
@@ -78,9 +79,9 @@ class DockTests(unittest.TestCase):
 
     def test_pinning_and_running_app_entries(self):
         self.dock.toggle_pin("editor.desktop")
-        self.assertIn("editor.desktop", self.store.data["pinned"])
+        self.assertIn("editor.desktop", self.settings.data["pinned"])
         self.dock.toggle_pin("editor.desktop")
-        self.assertNotIn("editor.desktop", self.store.data["pinned"])
+        self.assertNotIn("editor.desktop", self.settings.data["pinned"])
         self.dock.windows_received([WindowInfo("0x9", "Notes", "editor")])
         self.assertIn("editor.desktop", [app.id for kind, app in self.dock.entries if kind == "app"])
         self.dock.windows_received([])
@@ -93,7 +94,7 @@ class DockTests(unittest.TestCase):
         QTest.mousePress(self.dock, Qt.MouseButton.LeftButton, pos=first)
         QTest.mouseMove(self.dock, second)
         QTest.mouseRelease(self.dock, Qt.MouseButton.LeftButton, pos=second)
-        self.assertEqual(self.store.data["pinned"], ["terminal.desktop", "browser.desktop"])
+        self.assertEqual(self.settings.data["pinned"], ["terminal.desktop", "browser.desktop"])
 
     def test_picker_search_and_pin(self):
         picker = AppPicker(self.dock)
@@ -101,7 +102,7 @@ class DockTests(unittest.TestCase):
         picker.search.setText("editor")
         self.assertEqual(picker.list.count(), 1)
         picker.toggle_pin()
-        self.assertIn("editor.desktop", self.store.data["pinned"])
+        self.assertIn("editor.desktop", self.settings.data["pinned"])
         picker.search.setText("no such application")
         self.assertEqual(picker.list.count(), 0)
         self.assertFalse(picker.open.isEnabled())
@@ -117,12 +118,12 @@ class DockTests(unittest.TestCase):
         with patch("flowdocks.ui.set_autostart") as autostart:
             settings.apply()
             autostart.assert_not_called()
-        self.assertEqual(self.store.data["icon_size"], 64)
-        self.assertEqual(self.store.data["position"], "left")
-        self.assertTrue(self.store.data["auto_hide"])
+        self.assertEqual(self.settings.data["icon_size"], 64)
+        self.assertEqual(self.settings.data["position"], "left")
+        self.assertTrue(self.settings.data["auto_hide"])
 
     def test_auto_hide_and_edge_reveal(self):
-        self.store.data["auto_hide"] = True
+        self.settings.data["auto_hide"] = True
         with patch.object(QCursor, "pos", return_value=QPoint(-1000, -1000)):
             self.dock.last_inside = time.monotonic() - 2
             for _ in range(45):
@@ -136,7 +137,7 @@ class DockTests(unittest.TestCase):
         self.assertLess(self.dock.hidden_amount, 1)
 
     def test_edge_disabled_and_toggle_latches(self):
-        self.store.data["edge_action"] = "off"
+        self.settings.data["edge_action"] = "off"
         self.dock.manual_hidden = True
         self.dock.hidden_amount = 1
         self.dock.layout_icons()
@@ -146,7 +147,7 @@ class DockTests(unittest.TestCase):
             self.dock.edge_since = time.monotonic() - 1
             self.dock.animate()
             self.assertTrue(self.dock.manual_hidden)
-            self.store.data["edge_action"] = "toggle"
+            self.settings.data["edge_action"] = "toggle"
             self.dock.edge_latched = False
             self.dock.animate()
             self.assertFalse(self.dock.manual_hidden)
@@ -173,7 +174,7 @@ class DockTests(unittest.TestCase):
         self.assertTrue(self.dock.isVisible())
 
     def test_normal_layer_default_and_temporary_raise_restores(self):
-        self.assertEqual(self.store.data["layer"], "normal")
+        self.assertEqual(self.settings.data["layer"], "normal")
         self.assertFalse(self.dock.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
         with patch.object(self.dock, "apply_layer") as apply:
             self.dock.reveal()
@@ -184,7 +185,7 @@ class DockTests(unittest.TestCase):
             self.assertFalse(self.dock.temporary_raise)
             self.assertGreaterEqual(apply.call_count, 2)
         self.dock.change_layer("below")
-        self.assertEqual(self.store.data["layer"], "below")
+        self.assertEqual(self.settings.data["layer"], "below")
 
     def test_drag_from_picker_mime_and_drop_position(self):
         mime = QMimeData()
@@ -197,7 +198,7 @@ class DockTests(unittest.TestCase):
         event = QDropEvent(QPointF(point), Qt.DropAction.CopyAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
         self.dock.dropEvent(event)
         self.assertTrue(event.isAccepted())
-        self.assertEqual(self.store.data["pinned"], ["editor.desktop", "browser.desktop", "terminal.desktop"])
+        self.assertEqual(self.settings.data["pinned"], ["editor.desktop", "browser.desktop", "terminal.desktop"])
         self.assertFalse(self.dock.external_drag)
 
     def test_external_drop_copies_not_moves_and_deduplicates(self):
@@ -209,7 +210,7 @@ class DockTests(unittest.TestCase):
             event = QDropEvent(point, Qt.DropAction.CopyAction | Qt.DropAction.MoveAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
             self.dock.dropEvent(event)
             self.assertEqual(event.dropAction(), Qt.DropAction.CopyAction)
-        self.assertEqual(self.store.data["pinned"].count("editor.desktop"), 1)
+        self.assertEqual(self.settings.data["pinned"].count("editor.desktop"), 1)
 
     def test_drag_outside_unpins_without_launch(self):
         first = self.dock.rects[1].center().toPoint()
@@ -219,7 +220,7 @@ class DockTests(unittest.TestCase):
             QTest.mouseMove(self.dock, outside)
             QTest.mouseRelease(self.dock, Qt.MouseButton.LeftButton, pos=outside)
             launch.assert_not_called()
-        self.assertNotIn("browser.desktop", self.store.data["pinned"])
+        self.assertNotIn("browser.desktop", self.settings.data["pinned"])
 
     def test_move_dock_snaps_and_retains_alignment(self):
         geometry = self.dock.selected_screen().geometry()
@@ -228,18 +229,18 @@ class DockTests(unittest.TestCase):
                             ("right", QPoint(geometry.right(), geometry.center().y())),
                             ("bottom", QPoint(geometry.center().x(), geometry.bottom()))):
             self.dock.move_to_edge(point)
-            self.assertEqual(self.store.data["position"], edge)
+            self.assertEqual(self.settings.data["position"], edge)
             self.assertTrue(geometry.contains(self.dock.geometry()))
-            self.assertGreaterEqual(self.store.data["alignment"], 0)
-            self.assertLessEqual(self.store.data["alignment"], 1)
+            self.assertGreaterEqual(self.settings.data["alignment"], 0)
+            self.assertLessEqual(self.settings.data["alignment"], 1)
 
     def test_clock_drag_and_position_lock(self):
-        self.store.data["lock_position"] = True
+        self.settings.data["lock_position"] = True
         clock = self.dock.rects[-2].center().toPoint()
         QTest.mousePress(self.dock, Qt.MouseButton.LeftButton, pos=clock)
         self.assertFalse(self.dock.move_candidate)
         self.dock.pressed = -1
-        self.store.data["lock_position"] = False
+        self.settings.data["lock_position"] = False
         QTest.mousePress(self.dock, Qt.MouseButton.LeftButton, pos=clock)
         self.assertTrue(self.dock.move_candidate)
         with patch.object(self.dock, "move_to_edge") as move, patch.object(self.dock, "open_menu") as menu:
@@ -255,7 +256,7 @@ class DockTests(unittest.TestCase):
         settings.size.setValue(72)
         with patch.object(self.dock, "configure_shortcut", return_value=False):
             settings.apply()
-        self.assertEqual(self.store.data["icon_size"], 48)
+        self.assertEqual(self.settings.data["icon_size"], 48)
 
     def test_hover_magnifies(self):
         point = self.dock.mapToGlobal(self.dock.rects[1].center().toPoint())
@@ -275,12 +276,12 @@ class DockTests(unittest.TestCase):
     def test_overflow_keeps_geometry_on_screen(self):
         self.dock.apps = [DesktopApp(f"app{i}.desktop", f"App {i}", f"app{i}") for i in range(100)]
         self.dock.catalog = {app.id: app for app in self.dock.apps}
-        self.store.data["pinned"] = list(self.dock.catalog)
+        self.settings.data["pinned"] = list(self.dock.catalog)
         self.dock.rebuild()
         self.assertTrue(self.dock.overflow)
         self.assertLess(len(self.dock.entries), 100)
         self.assertTrue(self.dock.selected_screen().geometry().contains(self.dock.geometry()))
-        self.assertEqual(len(self.store.data["pinned"]), 100)
+        self.assertEqual(len(self.settings.data["pinned"]), 100)
 
     def shelf_on_screen(self):
         """The shelf is what the user sees and positions; its window is padded."""
@@ -288,7 +289,7 @@ class DockTests(unittest.TestCase):
                      self.dock.shelf.size().toSize())
 
     def test_free_mode_places_the_dock_where_it_is_asked(self):
-        self.store.data.update(move_mode="free", free_x=0.25, free_y=0.4)
+        self.settings.data.update(move_mode="free", free_x=0.25, free_y=0.4)
         self.dock.rebuild()
         screen = self.dock.selected_screen().geometry()
         self.assertTrue(screen.contains(self.shelf_on_screen()))
@@ -302,12 +303,12 @@ class DockTests(unittest.TestCase):
         # top edge. Across its thickness the shelf must now sit flush; along its
         # length the window keeps its magnification headroom on screen, so a
         # hover-grown shelf cannot spill off, and a small inset is expected there.
-        self.store.data["move_mode"] = "free"
+        self.settings.data["move_mode"] = "free"
         for orientation in ("horizontal", "vertical"):
-            self.store.data["orientation"] = orientation
+            self.settings.data["orientation"] = orientation
             for free_x, free_y in ((0, 0), (1, 1), (0, 1), (1, 0)):
                 with self.subTest(orientation=orientation, x=free_x, y=free_y):
-                    self.store.data.update(free_x=free_x, free_y=free_y)
+                    self.settings.data.update(free_x=free_x, free_y=free_y)
                     self.dock.rebuild()
                     screen = self.dock.selected_screen().geometry()
                     shelf = self.shelf_on_screen()
@@ -321,7 +322,7 @@ class DockTests(unittest.TestCase):
                     self.assertLessEqual(abs(gap), 2, f"{gap}px from the edge it faces")
 
     def test_free_rotation_switches_between_bar_and_column(self):
-        self.store.data.update(move_mode="free", orientation="vertical", free_x=0.5, free_y=0.5)
+        self.settings.data.update(move_mode="free", orientation="vertical", free_x=0.5, free_y=0.5)
         self.dock.rebuild()
         self.assertFalse(self.dock.horizontal)
         column = self.dock.geometry()
@@ -329,16 +330,16 @@ class DockTests(unittest.TestCase):
         self.assertFalse(self.dock.grab().isNull())
         for index, rect in enumerate(self.dock.rects):
             self.assertEqual(self.dock.hit_test(rect.center()), index)
-        self.store.data["orientation"] = "horizontal"
+        self.settings.data["orientation"] = "horizontal"
         self.dock.rebuild()
         self.assertTrue(self.dock.horizontal)
         self.assertGreater(self.dock.geometry().width(), self.dock.geometry().height())
 
     def test_edge_mode_takes_its_orientation_from_the_edge(self):
-        self.store.data.update(move_mode="edge", orientation="vertical", position="bottom")
+        self.settings.data.update(move_mode="edge", orientation="vertical", position="bottom")
         self.dock.rebuild()
         self.assertTrue(self.dock.horizontal, "the edge wins over the rotation setting")
-        self.store.data["position"] = "left"
+        self.settings.data["position"] = "left"
         self.dock.rebuild()
         self.assertFalse(self.dock.horizontal)
 
@@ -352,10 +353,10 @@ class DockTests(unittest.TestCase):
         self.assertTrue(settings.orientation.isEnabled())
         settings.orientation.setCurrentIndex(settings.orientation.findData("horizontal"))
         settings.apply()
-        self.assertEqual(self.store.data["orientation"], "horizontal")
+        self.assertEqual(self.settings.data["orientation"], "horizontal")
 
     def test_free_drag_keeps_the_shelf_on_screen(self):
-        self.store.data["move_mode"] = "free"
+        self.settings.data["move_mode"] = "free"
         self.dock.rebuild()
         screen = self.dock.selected_screen().geometry()
         self.dock.grab_offset = QPoint(30, 20)
@@ -364,13 +365,13 @@ class DockTests(unittest.TestCase):
         # Dragging far past a corner clamps instead of leaving the screen.
         self.dock.move_free(QPoint(screen.right() + 900, screen.bottom() + 900))
         self.assertTrue(screen.contains(self.shelf_on_screen()))
-        self.assertEqual((self.store.data["free_x"], self.store.data["free_y"]), (1, 1))
+        self.assertEqual((self.settings.data["free_x"], self.settings.data["free_y"]), (1, 1))
         self.dock.move_free(QPoint(screen.left() - 900, screen.top() - 900))
         self.assertTrue(screen.contains(self.shelf_on_screen()))
-        self.assertEqual((self.store.data["free_x"], self.store.data["free_y"]), (0, 0))
+        self.assertEqual((self.settings.data["free_x"], self.settings.data["free_y"]), (0, 0))
 
     def test_free_mode_ignores_auto_hide_and_the_edge_hotspot(self):
-        self.store.data.update(move_mode="free", auto_hide=True, edge_action="toggle")
+        self.settings.data.update(move_mode="free", auto_hide=True, edge_action="toggle")
         self.dock.rebuild()
         edge = self.dock.mapToGlobal(QPoint(self.dock.width() // 2, self.dock.height() - 1))
         with patch.object(QCursor, "pos", return_value=edge):
@@ -391,7 +392,7 @@ class DockTests(unittest.TestCase):
         self.assertTrue(self.dock.free_mode)
         self.dock.set_edge("left")
         self.assertFalse(self.dock.free_mode)
-        self.assertEqual(self.store.data["position"], "left")
+        self.assertEqual(self.settings.data["position"], "left")
 
     def test_preferences_disables_edge_controls_in_free_mode(self):
         settings = SettingsDialog(self.dock)
@@ -401,7 +402,7 @@ class DockTests(unittest.TestCase):
         self.assertFalse(settings.edge_action.isEnabled())
         self.assertFalse(settings.hide.isEnabled())
         settings.apply()
-        self.assertEqual(self.store.data["move_mode"], "free")
+        self.assertEqual(self.settings.data["move_mode"], "free")
 
     def test_panel_menu_reflects_capabilities(self):
         for desktop, expected in (("xfce", True), ("gnome", False)):
@@ -450,6 +451,72 @@ class DockTests(unittest.TestCase):
         self.addCleanup(settings.deleteLater)
         self.assertTrue(settings.shortcut.keySequence().toString())
 
+    def pinned_kinds(self):
+        return [kind for kind, _ in self.dock.entries if kind in ("app", "separator")]
+
+    def test_separators_appear_between_icons(self):
+        self.settings.data["pinned"] = ["browser.desktop", SEPARATOR, "terminal.desktop"]
+        self.dock.rebuild()
+        self.assertEqual(self.pinned_kinds(), ["app", "separator", "app"])
+        self.assertEqual([s for s in self.dock.slots if s is not None], [0, 1, 2])
+        self.assertFalse(self.dock.grab().isNull())
+        for index, rect in enumerate(self.dock.rects):
+            self.assertEqual(self.dock.hit_test(rect.center()), index)
+
+    def test_separator_is_narrower_than_an_icon_and_never_magnifies(self):
+        self.settings.data["pinned"] = ["browser.desktop", SEPARATOR, "terminal.desktop"]
+        self.dock.rebuild()
+        divider = self.pinned_kinds().index("separator") + 1
+        icon = self.dock.rects[1]
+        self.assertLess(self.dock.rects[divider].width(), icon.width())
+        point = self.dock.mapToGlobal(self.dock.rects[divider].center().toPoint())
+        with patch.object(QCursor, "pos", return_value=point):
+            for _ in range(15):
+                self.dock.animate()
+        self.assertEqual(self.dock.scales[divider], 1.0)
+
+    def test_identical_separators_are_removed_individually(self):
+        # Separators share a value, so they must be addressed by slot, never by
+        # searching the pinned list, or removing one would remove the first.
+        self.settings.data["pinned"] = ["browser.desktop", SEPARATOR,
+                                     "terminal.desktop", SEPARATOR, "editor.desktop"]
+        self.dock.rebuild()
+        second = [i for i, (kind, _) in enumerate(self.dock.entries) if kind == "separator"][1]
+        self.dock.remove_pin(self.dock.slots[second])
+        self.assertEqual(self.settings.data["pinned"],
+                         ["browser.desktop", SEPARATOR, "terminal.desktop", "editor.desktop"])
+
+    def test_separator_can_be_added_and_dragged_to_a_new_place(self):
+        self.settings.data["pinned"] = ["browser.desktop", "terminal.desktop"]
+        self.dock.rebuild()
+        self.dock.add_separator()
+        self.assertEqual(self.settings.data["pinned"],
+                         ["browser.desktop", "terminal.desktop", SEPARATOR])
+        self.dock.add_separator(1)
+        self.assertEqual(self.settings.data["pinned"],
+                         ["browser.desktop", SEPARATOR, "terminal.desktop", SEPARATOR])
+        # Drag the trailing separator to the front.
+        self.dock.move_pin(3, 0)
+        self.assertEqual(self.settings.data["pinned"],
+                         [SEPARATOR, "browser.desktop", SEPARATOR, "terminal.desktop"])
+
+    def test_dragging_a_separator_off_the_dock_removes_only_it(self):
+        self.settings.data["pinned"] = ["browser.desktop", SEPARATOR, "terminal.desktop"]
+        self.dock.rebuild()
+        divider = self.pinned_kinds().index("separator") + 1
+        start = self.dock.rects[divider].center().toPoint()
+        outside = QPoint(self.dock.width() + 120, -120)
+        QTest.mousePress(self.dock, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(self.dock, outside)
+        QTest.mouseRelease(self.dock, Qt.MouseButton.LeftButton, pos=outside)
+        self.assertEqual(self.settings.data["pinned"], ["browser.desktop", "terminal.desktop"])
+
+    def test_separator_survives_a_settings_roundtrip(self):
+        self.settings.data["pinned"] = ["browser.desktop", SEPARATOR, "terminal.desktop"]
+        self.store.save()
+        self.assertEqual(SettingsStore(Path(self.directory.name)).dock(0).data["pinned"],
+                         ["browser.desktop", SEPARATOR, "terminal.desktop"])
+
     def test_dialog_lifecycle(self):
         self.dock.open_picker()
         original = self.dock.dialog
@@ -458,6 +525,106 @@ class DockTests(unittest.TestCase):
         original.reject()
         self.assertIsNone(self.dock.dialog)
 
+
+
+class DockManagerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.qt = QApplication.instance() or QApplication([])
+        cls.qt.setQuitOnLastWindowClosed(False)
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.apps = [DesktopApp("browser.desktop", "Browser", "browser")]
+        self.store = SettingsStore(Path(self.directory.name))
+        patcher = patch("flowdocks.ui.discover_apps", return_value=self.apps)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        poller = patch.object(Dock, "poll_windows")
+        poller.start()
+        self.addCleanup(poller.stop)
+        self.manager = DockManager(self.store, smoke_test=True)
+        self.addCleanup(self.cleanup)
+        self.quiet(self.manager.docks)
+        self.qt.processEvents()
+
+    def quiet(self, docks):
+        """Drive animation by hand rather than letting timers fire in tests."""
+        for dock in docks:
+            dock.timer.stop()
+            dock.poll_timer.stop()
+
+    def cleanup(self):
+        self.manager.close()
+        for dock in list(self.manager.docks):
+            dock.close()
+            dock.deleteLater()
+        self.qt.processEvents()
+
+    def test_starts_with_one_dock_and_adds_up_to_the_limit(self):
+        self.assertEqual(len(self.manager.docks), 1)
+        while len(self.manager.docks) < MAX_DOCKS:
+            self.assertTrue(self.manager.add_dock())
+            self.quiet(self.manager.docks)
+        self.assertEqual(len(self.manager.docks), MAX_DOCKS)
+        with patch.object(self.manager.docks[0], "show_error") as error:
+            self.assertFalse(self.manager.add_dock(), "the limit is refused, not exceeded")
+            error.assert_called_once()
+        self.assertEqual(len(self.manager.docks), MAX_DOCKS)
+        self.assertEqual(self.store.count(), MAX_DOCKS)
+
+    def test_each_dock_edits_only_its_own_settings(self):
+        self.manager.add_dock()
+        self.quiet(self.manager.docks)
+        first, second = self.manager.docks
+        first.store.data["theme"] = "graphite"
+        second.store.data["theme"] = "aurora"
+        self.assertEqual(self.store.data["docks"][0]["theme"], "graphite")
+        self.assertEqual(self.store.data["docks"][1]["theme"], "aurora")
+        first.toggle_pin("browser.desktop")
+        self.assertEqual(second.store.data["pinned"], [])
+
+    def test_removing_a_dock_reindexes_the_rest(self):
+        self.manager.add_dock()
+        self.quiet(self.manager.docks)
+        self.manager.add_dock()
+        self.quiet(self.manager.docks)
+        for index, dock in enumerate(self.manager.docks):
+            dock.store.data["theme"] = ("midnight", "graphite", "aurora")[index]
+        self.manager.remove_dock(self.manager.docks[0])
+        self.assertEqual(len(self.manager.docks), 2)
+        # Each surviving dock must now address the slice that moved under it.
+        self.assertEqual([dock.store.data["theme"] for dock in self.manager.docks],
+                         ["graphite", "aurora"])
+        self.assertEqual([dock.store.index for dock in self.manager.docks], [0, 1])
+
+    def test_the_last_dock_cannot_be_removed(self):
+        dock = self.manager.docks[0]
+        with patch.object(dock, "show_error") as error:
+            self.assertFalse(self.manager.remove_dock(dock))
+            error.assert_called_once()
+        self.assertEqual(len(self.manager.docks), 1)
+
+    def test_one_shortcut_toggles_every_dock_together(self):
+        self.manager.add_dock()
+        self.quiet(self.manager.docks)
+        self.manager.reveal_all()
+        self.assertTrue(all(d.isVisible() for d in self.manager.docks))
+        self.manager.toggle_all()
+        self.assertTrue(all(d.manual_hidden for d in self.manager.docks))
+        self.manager.toggle_all()
+        self.assertFalse(any(d.manual_hidden for d in self.manager.docks))
+
+    def test_the_shortcut_is_shared_rather_than_per_dock(self):
+        self.manager.add_dock()
+        self.quiet(self.manager.docks)
+        for dock in self.manager.docks:
+            self.assertIs(dock.store.globals, self.store.data)
+            self.assertNotIn("shortcut", dock.store.data)
+        with patch.object(self.manager, "configure_shortcut", return_value=True) as configure:
+            self.manager.docks[1].configure_shortcut(True, "Ctrl+Alt+J")
+            configure.assert_not_called()  # smoke_test docks short-circuit
 
 if __name__ == "__main__":
     unittest.main()

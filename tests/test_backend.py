@@ -44,14 +44,17 @@ class BackendTests(unittest.TestCase):
         self.assertEqual((app.icon, app.path, app.terminal, app.startup_wm_class, app.working_directory),
                          ("", "", False, "", ""))
         self.assertEqual(b.WindowInfo("0x1", "Name", "Class").pid, 0)
-        self.assertEqual(b.DEFAULT_SETTINGS, {
+        self.assertEqual(b.DEFAULT_DOCK, {
             "icon_size": 52, "magnification": 1.55, "auto_hide": False, "position": "bottom",
             "theme": "midnight", "opacity": 92, "screen": 0, "pinned": [],
-            "layer": "normal", "edge_action": "reveal", "shortcut_enabled": True,
-            "shortcut": "Ctrl+Alt+A", "alignment": 0.5, "lock_position": False,
+            "layer": "normal", "edge_action": "reveal",
+            "alignment": 0.5, "lock_position": False,
             "move_mode": "edge", "free_x": 0.5, "free_y": 0.82,
             "orientation": "horizontal",
         })
+        # One key grab serves every dock, so the shortcut sits beside them.
+        self.assertEqual(b.DEFAULT_GLOBAL, {"shortcut_enabled": True, "shortcut": "Ctrl+Alt+A"})
+        self.assertEqual(b.MAX_DOCKS, 5)
 
     def test_dropped_desktop_copies_resolve_to_the_installed_app(self):
         installed = self.desktop("dev.example.Tool.desktop")
@@ -97,43 +100,48 @@ class BackendTests(unittest.TestCase):
         legacy.write_text(json.dumps({"theme": "aurora", "pinned": ["kept.desktop"]}), encoding="utf-8")
         store = b.SettingsStore()
         self.assertEqual(store.path, self.config / "flowdocks" / "settings.json")
-        self.assertEqual(store.data["theme"], "aurora")
-        self.assertEqual(store.data["pinned"], ["kept.desktop"])
+        self.assertEqual(store.dock(0).data["theme"], "aurora")
+        self.assertEqual(store.dock(0).data["pinned"], ["kept.desktop"])
         store.save()
         # Saving moves forward without disturbing the old file.
         self.assertTrue(store.path.is_file())
         self.assertEqual(json.loads(legacy.read_text(encoding="utf-8"))["theme"], "aurora")
         legacy.write_text(json.dumps({"theme": "graphite"}), encoding="utf-8")
-        self.assertEqual(b.SettingsStore().data["theme"], "aurora")
+        self.assertEqual(b.SettingsStore().dock(0).data["theme"], "aurora")
 
     def test_positioning_settings_roundtrip_and_invalid_values(self):
         values = {"move_mode": "free", "free_x": 0.25, "free_y": 1, "orientation": "vertical"}
         store = b.SettingsStore(self.config)
-        store.data.update(values)
+        store.dock(0).data.update(values)
         store.save()
         loaded = b.SettingsStore(self.config)
         for key, value in values.items():
-            self.assertEqual(loaded.data[key], value)
+            self.assertEqual(loaded.dock(0).data[key], value)
         invalid = {"move_mode": "floating", "free_x": -0.1, "free_y": "middle",
                    "orientation": "diagonal"}
-        data = b._validated_settings(invalid)
+        data = b._validated_dock(invalid)
         for key in invalid:
-            self.assertEqual(data[key], b.DEFAULT_SETTINGS[key])
+            self.assertEqual(data[key], b.DEFAULT_DOCK[key])
 
     def test_interaction_settings_roundtrip_and_invalid_values(self):
-        values = {"layer": "below", "edge_action": "toggle", "shortcut_enabled": False,
-                  "shortcut": "Meta+F12", "alignment": 0.8, "lock_position": True}
+        values = {"layer": "below", "edge_action": "toggle", "alignment": 0.8, "lock_position": True}
         store = b.SettingsStore(self.config)
-        store.data.update(values)
+        store.dock(0).data.update(values)
+        store.data.update(shortcut_enabled=False, shortcut="Meta+F12")
         store.save()
         loaded = b.SettingsStore(self.config)
         for key, value in values.items():
-            self.assertEqual(loaded.data[key], value)
-        invalid = {"layer": [], "edge_action": "bad", "shortcut_enabled": "yes",
-                   "shortcut": "bad\nvalue", "alignment": float("nan"), "lock_position": 1}
-        data = b._validated_settings(invalid)
+            self.assertEqual(loaded.dock(0).data[key], value)
+        self.assertEqual((loaded.data["shortcut_enabled"], loaded.data["shortcut"]),
+                         (False, "Meta+F12"))
+        invalid = {"layer": [], "edge_action": "bad",
+                   "alignment": float("nan"), "lock_position": 1}
+        data = b._validated_dock(invalid)
         for key in invalid:
-            self.assertEqual(data[key], b.DEFAULT_SETTINGS[key])
+            self.assertEqual(data[key], b.DEFAULT_DOCK[key])
+        root = b._validated_root({"shortcut_enabled": "yes", "shortcut": "bad\nvalue"})
+        self.assertEqual((root["shortcut_enabled"], root["shortcut"]),
+                         (b.DEFAULT_GLOBAL["shortcut_enabled"], b.DEFAULT_GLOBAL["shortcut"]))
 
     def test_precedence_hidden_tombstones_and_subdirectory_ids(self):
         self.desktop("vendor/tool.desktop", "Name=System\n", self.system)
@@ -340,11 +348,70 @@ class BackendTests(unittest.TestCase):
         self.desktop("firefox.desktop", "Name=Firefox\n")
         store = b.SettingsStore()
         self.assertEqual(store.path, self.config / "flowdocks" / "settings.json")
-        self.assertEqual(store.data["pinned"], ["firefox.desktop"])
+        self.assertEqual(store.dock(0).data["pinned"], ["firefox.desktop"])
         self.assertFalse(store.path.exists())
-        store.data["pinned"].append("other.desktop")
-        self.assertEqual(b.DEFAULT_SETTINGS["pinned"], [])
-        self.assertEqual(b.SettingsStore().data["pinned"], ["firefox.desktop"])
+        store.dock(0).data["pinned"].append("other.desktop")
+        self.assertEqual(b.DEFAULT_DOCK["pinned"], [])
+        self.assertEqual(b.SettingsStore().dock(0).data["pinned"], ["firefox.desktop"])
+
+    def test_docks_are_added_up_to_the_limit_and_never_all_removed(self):
+        store = b.SettingsStore(self.config)
+        self.assertEqual(store.count(), 1)
+        added = [store.add_dock() for _ in range(b.MAX_DOCKS + 2)]
+        self.assertEqual(store.count(), b.MAX_DOCKS)
+        self.assertEqual(added[-2:], [None, None], "past the limit add_dock reports refusal")
+        # A new dock starts on a free edge rather than on top of an existing one.
+        self.assertEqual([dock["position"] for dock in store.data["docks"]][:4],
+                         ["bottom", "top", "left", "right"])
+        while store.count() > 1:
+            self.assertTrue(store.remove_dock(store.count() - 1))
+        self.assertFalse(store.remove_dock(0), "the last dock is never removed")
+        self.assertEqual(store.count(), 1)
+
+    def test_each_dock_keeps_its_own_settings(self):
+        store = b.SettingsStore(self.config)
+        store.add_dock()
+        store.dock(0).data.update(theme="graphite", pinned=["a.desktop"])
+        store.dock(1).data.update(theme="aurora", pinned=["b.desktop", b.SEPARATOR])
+        store.save()
+        loaded = b.SettingsStore(self.config)
+        self.assertEqual(loaded.dock(0).data["theme"], "graphite")
+        self.assertEqual(loaded.dock(1).data["theme"], "aurora")
+        self.assertEqual(loaded.dock(1).data["pinned"], ["b.desktop", b.SEPARATOR])
+        # The slice writes through to the store it came from.
+        loaded.dock(1).data["opacity"] = 40
+        self.assertEqual(loaded.data["docks"][1]["opacity"], 40)
+        self.assertIs(loaded.dock(0).globals, loaded.data)
+
+    def test_a_file_written_before_multiple_docks_reads_back_as_one(self):
+        flat = {"theme": "aurora", "position": "top", "pinned": ["kept.desktop"],
+                "shortcut": "Ctrl+Alt+K", "shortcut_enabled": False}
+        (self.config / "settings.json").parent.mkdir(parents=True, exist_ok=True)
+        (self.config / "settings.json").write_text(json.dumps(flat), encoding="utf-8")
+        store = b.SettingsStore(self.config)
+        self.assertEqual(store.count(), 1)
+        self.assertEqual(store.dock(0).data["theme"], "aurora")
+        self.assertEqual(store.dock(0).data["pinned"], ["kept.desktop"])
+        # The shortcut is lifted out of the dock and shared.
+        self.assertEqual((store.data["shortcut"], store.data["shortcut_enabled"]),
+                         ("Ctrl+Alt+K", False))
+        self.assertNotIn("shortcut", store.dock(0).data)
+
+    def test_a_corrupt_docks_list_falls_back_to_one_dock(self):
+        for docks in ([], "not-a-list", [None, 7], None):
+            with self.subTest(docks=docks):
+                (self.config / "settings.json").parent.mkdir(parents=True, exist_ok=True)
+                (self.config / "settings.json").write_text(
+                    json.dumps({"docks": docks}), encoding="utf-8")
+                store = b.SettingsStore(self.config)
+                self.assertGreaterEqual(store.count(), 1)
+                self.assertEqual(store.dock(0).data["theme"], b.DEFAULT_DOCK["theme"])
+
+    def test_more_docks_than_the_limit_in_a_file_are_trimmed(self):
+        (self.config / "settings.json").parent.mkdir(parents=True, exist_ok=True)
+        (self.config / "settings.json").write_text(
+            json.dumps({"docks": [{"theme": "aurora"}] * (b.MAX_DOCKS + 3)}), encoding="utf-8")
+        self.assertEqual(b.SettingsStore(self.config).count(), b.MAX_DOCKS)
 
     def test_settings_roundtrip_and_explicit_empty_pins(self):
         self.desktop("firefox.desktop")
@@ -362,29 +429,29 @@ class BackendTests(unittest.TestCase):
                   "pinned": ["app.desktop", 1, None, "app.desktop", ""], "unknown": 123}
         (self.config / "settings.json").write_text(json.dumps(values), encoding="utf-8")
         store = b.SettingsStore(self.config)
-        self.assertEqual(store.data, {**b.DEFAULT_SETTINGS, "pinned": ["app.desktop"]})
+        self.assertEqual(store.dock(0).data, {**b.DEFAULT_DOCK, "pinned": ["app.desktop"]})
 
     def test_corrupt_settings_and_relative_xdg_fallback(self):
         self.config.mkdir()
         for content in ("{broken", "[]", "null", "\ufffd"):
             (self.config / "settings.json").write_text(content, encoding="utf-8")
-            self.assertEqual(b.SettingsStore(self.config).data, b.DEFAULT_SETTINGS)
+            self.assertEqual(b.SettingsStore(self.config).dock(0).data, b.DEFAULT_DOCK)
         with patch.dict(os.environ, {"XDG_CONFIG_HOME": "relative"}):
             self.assertEqual(b.SettingsStore().path, self.root / ".config/flowdocks/settings.json")
 
     def test_extreme_magnification_values_are_rejected(self):
         store = b.SettingsStore(self.config)
         for value in (10 ** 400, float("inf"), float("-inf"), float("nan")):
-            store.data["magnification"] = value
+            store.dock(0).data["magnification"] = value
             store.save()
-            self.assertEqual(store.data["magnification"], 1.55)
-            self.assertEqual(b.SettingsStore(self.config).data["magnification"], 1.55)
+            self.assertEqual(store.dock(0).data["magnification"], 1.55)
+            self.assertEqual(b.SettingsStore(self.config).dock(0).data["magnification"], 1.55)
 
     def test_atomic_save_preserves_previous_on_replace_failure(self):
         store = b.SettingsStore(self.config)
         store.save()
         before = store.path.read_bytes()
-        store.data["icon_size"] = 64
+        store.dock(0).data["icon_size"] = 64
         with patch.object(b.os, "replace", side_effect=PermissionError("denied")):
             store.save()
         self.assertEqual(store.path.read_bytes(), before)

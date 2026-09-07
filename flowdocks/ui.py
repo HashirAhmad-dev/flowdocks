@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 )
 from . import panel as desktop_panel
 from .backend import (
-    DesktopApp, SettingsStore, activate_window, app_matches_window,
+    MAX_DOCKS, SEPARATOR, DesktopApp, SettingsStore, activate_window, app_matches_window,
     autostart_enabled, discover_apps, launch_app, list_windows,
     resolve_dropped_desktops, set_autostart,
 )
@@ -29,6 +29,9 @@ from .x11 import GlobalShortcut, set_window_layer
 
 
 APP_MIME = "application/x-flowdocks-app"
+
+# A separator occupies a fraction of an icon cell along the dock.
+SEPARATOR_WIDTH = 0.34
 
 
 THEMES = {
@@ -343,7 +346,7 @@ class SettingsDialog(QDialog):
             self.edge_action.addItem(title, key)
         self.edge_action.setCurrentIndex(self.edge_action.findData(settings["edge_action"]))
         form.addRow("Edge action", self.edge_action)
-        self.shortcut = QKeySequenceEdit(QKeySequence(settings["shortcut"]))
+        self.shortcut = QKeySequenceEdit(QKeySequence(dock.store.globals["shortcut"]))
         limit_to_one_combination(self.shortcut)
         form.addRow("Toggle shortcut", self.shortcut)
         self.size = self.slider(form, "Icon size", 32, 80, settings["icon_size"], " px")
@@ -356,7 +359,7 @@ class SettingsDialog(QDialog):
         self.autostart.setChecked(autostart_enabled())
         layout.addWidget(self.hide)
         self.shortcut_enabled = QCheckBox("Enable global shortcut (X11)")
-        self.shortcut_enabled.setChecked(settings["shortcut_enabled"])
+        self.shortcut_enabled.setChecked(dock.store.globals["shortcut_enabled"])
         layout.addWidget(self.shortcut_enabled)
         self.lock_position = QCheckBox("Lock dock position")
         self.lock_position.setChecked(settings["lock_position"])
@@ -450,13 +453,15 @@ class SettingsDialog(QDialog):
             magnification=self.zoom.value() / 100, opacity=self.opacity.value(),
             auto_hide=self.hide.isChecked(),
             layer=self.layer.currentData(), edge_action=self.edge_action.currentData(),
-            shortcut_enabled=self.shortcut_enabled.isChecked(), shortcut=sequence or "Ctrl+Alt+A",
             lock_position=self.lock_position.isChecked(),
             move_mode=self.move_mode.currentData(),
             orientation=self.orientation.currentData(),
         )
         if not self.dock.smoke_test and self.autostart.isChecked() != autostart_enabled():
             set_autostart(self.autostart.isChecked())
+        self.dock.store.globals.update(
+            shortcut_enabled=self.shortcut_enabled.isChecked(),
+            shortcut=sequence or "Ctrl+Alt+A")
         self.dock.save_settings()
         self.dock.temporary_raise = False
         self.dock.apply_layer()
@@ -465,9 +470,9 @@ class SettingsDialog(QDialog):
 
 
 class Dock(QWidget):
-    def __init__(self, store: SettingsStore, smoke_test=False):
+    def __init__(self, store, smoke_test=False, manager=None):
         super().__init__()
-        self.store, self.smoke_test = store, smoke_test
+        self.store, self.smoke_test, self.manager = store, smoke_test, manager
         self.setWindowTitle("FlowDocks")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool |
                             Qt.WindowType.WindowDoesNotAcceptFocus)
@@ -483,6 +488,7 @@ class Dock(QWidget):
         self.catalog = {app.id: app for app in self.apps}
         self.windows = []
         self.entries = []
+        self.slots = []
         self.rects = []
         self.scales = []
         self.icons = {}
@@ -534,26 +540,22 @@ class Dock(QWidget):
         self.connected_screens = set()
         self.screens_changed()
         self.poll_windows()
-        self.global_shortcut = GlobalShortcut(self)
-        self.global_shortcut.activated.connect(self.toggle_visibility)
-        app.aboutToQuit.connect(self.global_shortcut.close)
-        if not smoke_test:
-            QTimer.singleShot(0, self.initialize_shortcut)
+    def shutdown(self):
+        """Stop this dock ticking before it is discarded.
 
-    def initialize_shortcut(self):
-        if self.store.data["shortcut_enabled"]:
-            self.configure_shortcut(True, self.store.data["shortcut"])
+        Its timers are parented to the widget, but deleteLater only takes effect
+        on a later pass of the event loop, and an animation tick that lands in
+        between would run against a half-torn-down dock.
+        """
+        self.timer.stop()
+        self.poll_timer.stop()
+        self.tray.hide()
 
     def configure_shortcut(self, enabled, sequence):
-        if self.smoke_test:
+        """One key grab serves every dock, so the manager owns it."""
+        if self.smoke_test or self.manager is None:
             return True
-        if not enabled:
-            self.global_shortcut.unregister()
-            return True
-        error = self.global_shortcut.register(sequence)
-        if error:
-            self.show_error(error + " You can also bind 'flowdocks --toggle' in your desktop keyboard settings.")
-        return not error
+        return self.manager.configure_shortcut(enabled, sequence)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -616,26 +618,42 @@ class Dock(QWidget):
         self.poll_busy = False
         self.windows = windows
         signature = [(entry[0], entry[1].id if entry[0] == "app" else "") for entry in self.entries]
-        if signature != [(entry[0], entry[1].id if entry[0] == "app" else "") for entry in self.make_entries()]:
+        if signature != [(entry[0], entry[1].id if entry[0] == "app" else "") for entry in self.make_entries()[0]]:
             if not self.dragging and not self.dock_dragging and not self.external_drag and self.pressed < 0:
                 self.rebuild()
         self.update()
 
     def make_entries(self):
+        """Return the entries to draw and, for each, its slot in `pinned`.
+
+        Separators are indistinguishable by value, so every item carries the
+        index of the slot it came from; running apps that are not pinned carry
+        None. Callers address slots by that index, never by searching `pinned`.
+        """
         pinned = self.store.data["pinned"]
-        apps = [self.catalog[key] for key in pinned if key in self.catalog]
-        claimed = {w.id for w in self.windows if any(app_matches_window(app, w) for app in apps)}
+        items = []
+        for slot, token in enumerate(pinned):
+            if token == SEPARATOR:
+                items.append(("separator", None, slot))
+            elif token in self.catalog:
+                items.append(("app", self.catalog[token], slot))
+        claimed = {window.id for window in self.windows
+                   if any(app_matches_window(app, window) for kind, app, _ in items if kind == "app")}
         for app in self.apps:
-            matches = {w.id for w in self.windows if app_matches_window(app, w)}
+            matches = {window.id for window in self.windows if app_matches_window(app, window)}
             if app.id not in pinned and matches - claimed:
-                apps.append(app)
+                items.append(("app", app, None))
                 claimed.update(matches)
         screen = self.selected_screen().geometry()
         extent = screen.width() if self.horizontal else screen.height()
         # Leave enough space for magnification and the three built-in controls.
         capacity = max(1, int((extent - 100) / (self.store.data["icon_size"] + 14)) - 4)
-        self.overflow = len(apps) > capacity
-        return [("launcher", None), *[("app", app) for app in apps[:capacity]], ("clock", None), ("settings", None)]
+        self.overflow = len(items) > capacity
+        shown = items[:capacity]
+        entries = [("launcher", None), *[(kind, app) for kind, app, _ in shown],
+                   ("clock", None), ("settings", None)]
+        slots = [None, *[slot for _, _, slot in shown], None, None]
+        return entries, slots
 
     @property
     def free_mode(self):
@@ -671,7 +689,7 @@ class Dock(QWidget):
         return screens[min(self.store.data["screen"], len(screens) - 1)]
 
     def rebuild(self):
-        self.entries = self.make_entries()
+        self.entries, self.slots = self.make_entries()
         self.scales = [1.0] * len(self.entries)
         self.icons = {app.id: app_icon(app) for kind, app in self.entries if kind == "app"}
         self.hover = self.pressed = -1
@@ -710,7 +728,8 @@ class Dock(QWidget):
     def layout_icons(self):
         size = self.store.data["icon_size"]
         edge = self.anchor
-        widths = [size * scale + 14 for scale in self.scales]
+        factors = [SEPARATOR_WIDTH if kind == "separator" else 1.0 for kind, _ in self.entries]
+        widths = [size * scale * factor + 14 for scale, factor in zip(self.scales, factors)]
         length = sum(widths) + 24
         extent = self.width() if self.horizontal else self.height()
         shrink = min(1.0, (extent - 20) / length)
@@ -726,12 +745,15 @@ class Dock(QWidget):
         self.shelf = QRectF(start, shelf_cross, length, depth) if self.horizontal else QRectF(shelf_cross, start, depth, length)
         cursor = start + 12
         self.rects = []
-        for scale, width in zip(self.scales, widths):
-            actual = size * scale * shrink
+        for scale, width, factor in zip(self.scales, widths, factors):
+            actual = size * scale * shrink * factor
             baseline = cross - 27 + offset if far else 27 + offset
             perpendicular = baseline - actual if far else baseline
             along = cursor + (width - actual) / 2
-            rect = QRectF(along, perpendicular, actual, actual) if self.horizontal else QRectF(perpendicular, along, actual, actual)
+            across = size * scale * shrink
+            perpendicular = baseline - across if far else baseline
+            rect = (QRectF(along, perpendicular, actual, across) if self.horizontal
+                    else QRectF(perpendicular, along, across, actual))
             self.rects.append(rect)
             cursor += width
         region = QRegion(self.shelf.adjusted(-7, -7, 7, 7).toAlignedRect())
@@ -803,6 +825,8 @@ class Dock(QWidget):
         for i, scale in enumerate(self.scales):
             if self.dragging or self.external_drag or self.dock_dragging:
                 continue
+            if self.entries[i][0] == "separator":
+                continue
             distance = abs(i - self.hover) if self.hover >= 0 else 100
             factor = math.exp(-(distance * distance) / 1.5)
             wanted = 1 + (self.store.data["magnification"] - 1) * factor
@@ -825,6 +849,8 @@ class Dock(QWidget):
         kind, app = self.entries[self.hover]
         if kind == "app":
             return app.name
+        if kind == "separator":
+            return "Separator - drag to move, right-click to remove"
         return {"launcher": "Applications / more apps" if self.overflow else "Applications", "clock": time.strftime("%A, %d %B"), "settings": "Dock preferences"}[kind]
 
     def tooltip_rect(self):
@@ -914,6 +940,17 @@ class Dock(QWidget):
                         else:
                             center = QPointF(self.shelf.right() - 8 if edge == "right" else self.shelf.left() + 8, rect.center().y() + along)
                         painter.drawEllipse(center, 2, 2)
+            elif kind == "separator":
+                painter.setPen(QPen(QColor(185, 209, 238, 78), 2,
+                                    Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                if self.horizontal:
+                    x = rect.center().x()
+                    painter.drawLine(QPointF(x, self.shelf.top() + 16),
+                                     QPointF(x, self.shelf.bottom() - 16))
+                else:
+                    y = rect.center().y()
+                    painter.drawLine(QPointF(self.shelf.left() + 16, y),
+                                     QPointF(self.shelf.right() - 16, y))
             elif kind == "launcher":
                 self.draw_brand(painter, rect, accent)
             elif kind == "settings":
@@ -953,10 +990,15 @@ class Dock(QWidget):
             else:
                 painter.drawLine(QPointF(self.shelf.left() + 12, before.top() - 7), QPointF(self.shelf.right() - 12, before.top() - 7))
         if self.dragging and 0 <= self.pressed < len(self.entries):
-            app = self.entries[self.pressed][1]
+            kind, app = self.entries[self.pressed]
             ghost = QRectF(self.drag_point.x() - 26, self.drag_point.y() - 26, 52, 52)
-            pixmap = self.icons[app.id].pixmap(52, 52)
-            painter.drawPixmap(ghost, pixmap, QRectF(pixmap.rect()))
+            if kind == "separator":
+                painter.setPen(QPen(QColor(accent), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawLine(QPointF(ghost.center().x(), ghost.top() + 6),
+                                 QPointF(ghost.center().x(), ghost.bottom() - 6))
+            else:
+                pixmap = self.icons[app.id].pixmap(52, 52)
+                painter.drawPixmap(ghost, pixmap, QRectF(pixmap.rect()))
         if self.hover >= 0 and self.hidden_amount < 0.1 and not self.dragging and not self.dock_dragging:
             tooltip = self.tooltip_rect()
             painter.setBrush(QColor("#17253a"))
@@ -1011,7 +1053,7 @@ class Dock(QWidget):
             self.drag_dock(event.globalPosition().toPoint())
         elif self.pressed >= 0 and moved:
             kind, app = self.entries[self.pressed]
-            self.dragging = kind == "app"
+            self.dragging = kind in ("app", "separator")
             if self.dragging:
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 self.drag_point = event.position()
@@ -1050,7 +1092,7 @@ class Dock(QWidget):
                      "top": abs(global_point.y() - geometry.top()), "bottom": abs(global_point.y() - geometry.bottom())}
         self.store.data["position"] = min(distances, key=distances.get)
         self.store.data["screen"] = QApplication.screens().index(screen)
-        self.entries = self.make_entries()
+        self.entries, self.slots = self.make_entries()
         self.scales = [1.0] * len(self.entries)
         self.icons = {app.id: app_icon(app) for kind, app in self.entries if kind == "app"}
         self.hidden_amount = 0
@@ -1062,10 +1104,36 @@ class Dock(QWidget):
         self.reposition()
 
     def insertion_index(self, point):
+        """Which pinned slot a drop at this point should land in front of."""
         coordinate = point.x() if self.horizontal else point.y()
-        return sum(1 for (kind, app), rect in zip(self.entries, self.rects)
-                   if kind == "app" and app.id in self.store.data["pinned"]
+        return sum(1 for slot, rect in zip(self.slots, self.rects)
+                   if slot is not None
                    and coordinate >= (rect.center().x() if self.horizontal else rect.center().y()))
+
+    def move_pin(self, slot, index):
+        """Move one pinned slot, addressed by position so separators stay distinct."""
+        pins = self.store.data["pinned"]
+        if not 0 <= slot < len(pins):
+            return
+        token = pins.pop(slot)
+        if slot < index:
+            index -= 1
+        pins.insert(max(0, min(len(pins), index)), token)
+        self.save_settings()
+        self.rebuild()
+
+    def remove_pin(self, slot):
+        pins = self.store.data["pinned"]
+        if 0 <= slot < len(pins):
+            pins.pop(slot)
+            self.save_settings()
+            self.rebuild()
+
+    def add_separator(self, index=None):
+        pins = self.store.data["pinned"]
+        pins.insert(len(pins) if index is None else max(0, min(len(pins), index)), SEPARATOR)
+        self.save_settings()
+        self.rebuild()
 
     def insert_apps(self, app_ids, index):
         pins = self.store.data["pinned"]
@@ -1092,11 +1160,16 @@ class Dock(QWidget):
             self.dragging = False
             self.unsetCursor()
             if source >= 0:
-                app = self.entries[source][1]
-                if self.shelf.adjusted(-20, -40, 20, 40).contains(event.position()):
+                kind, app = self.entries[source]
+                slot = self.slots[source]
+                inside = self.shelf.adjusted(-20, -40, 20, 40).contains(event.position())
+                if inside and slot is not None:
+                    self.move_pin(slot, self.insertion_index(event.position()))
+                elif inside and kind == "app":
+                    # A running application that was not pinned yet.
                     self.insert_apps([app.id], self.insertion_index(event.position()))
-                elif app.id in self.store.data["pinned"]:
-                    self.toggle_pin(app.id)
+                elif slot is not None:
+                    self.remove_pin(slot)
             self.drop_index = None
             self.rebuild()
         elif target == source and source >= 0:
@@ -1160,19 +1233,28 @@ class Dock(QWidget):
     def open_menu(self, position, index=-1):
         menu = QMenu(self)
         menu.setStyleSheet(DIALOG_STYLE)
-        if index >= 0 and self.entries[index][0] == "app":
+        slot = self.slots[index] if 0 <= index < len(self.slots) else None
+        if index >= 0 and self.entries[index][0] == "separator":
+            heading = menu.addAction("Separator")
+            heading.setEnabled(False)
+            menu.addAction("Remove separator", lambda: self.remove_pin(slot))
+            menu.addSeparator()
+        elif index >= 0 and self.entries[index][0] == "app":
             app = self.entries[index][1]
             heading = menu.addAction(app.name)
             heading.setEnabled(False)
             menu.addAction("Launch new instance", lambda: self.launch(app))
             pinned = app.id in self.store.data["pinned"]
             menu.addAction("Unpin from dock" if pinned else "Pin to dock", lambda: self.toggle_pin(app.id))
+            menu.addAction("Insert separator here",
+                           lambda: self.add_separator(slot if slot is not None else None))
             for window in [w for w in self.windows if app_matches_window(app, w)]:
                 menu.addAction(window.title[:65] or "Activate window", lambda checked=False, key=window.id: self.run_worker(activate_window, key))
             menu.addSeparator()
         menu.addAction("Applications...", self.open_picker)
         menu.addAction("Preferences...", self.open_settings)
         menu.addAction("Refresh applications", self.refresh_apps)
+        menu.addAction("Add separator", self.add_separator)
         menu.addAction("Hide dock", self.toggle_visibility)
         edges = menu.addMenu("Screen edge")
         for edge in ("bottom", "top", "left", "right"):
@@ -1189,6 +1271,12 @@ class Dock(QWidget):
             action.setCheckable(True)
             action.setChecked(self.store.data["layer"] == layer)
         self.add_panel_menu(menu)
+        if self.manager is not None:
+            docks = menu.addMenu(f"Docks ({self.manager.store.count()} of {MAX_DOCKS})")
+            add = docks.addAction("Add another dock", self.manager.add_dock)
+            add.setEnabled(self.manager.store.count() < MAX_DOCKS)
+            remove = docks.addAction("Remove this dock", lambda: self.manager.remove_dock(self))
+            remove.setEnabled(self.manager.store.count() > 1)
         menu.addSeparator()
         menu.addAction("Quit FlowDocks", QApplication.quit)
         self.menu_open = True
@@ -1306,3 +1394,95 @@ class Dock(QWidget):
         self.insert_apps(app_ids, self.insertion_index(event.position()))
         event.setDropAction(Qt.DropAction.CopyAction)
         event.accept()
+
+
+class DockManager(QObject):
+    """Owns every dock, the one key grab they share, and the tray icon.
+
+    Docks are independent: each has its own pins, edge, theme and layer. What
+    they share is the global shortcut and the commands arriving on the control
+    socket, which act on all of them at once.
+    """
+
+    def __init__(self, store: SettingsStore, smoke_test=False):
+        super().__init__()
+        self.store, self.smoke_test = store, smoke_test
+        self.docks = []
+        self.shortcut = GlobalShortcut(self)
+        self.shortcut.activated.connect(self.toggle_all)
+        # GlobalShortcut already closes its own display on aboutToQuit. Connecting
+        # here too would outlive this manager and fire on a deleted object.
+        self.sync()
+        if not smoke_test:
+            QTimer.singleShot(0, self.initialise_shortcut)
+
+    def sync(self):
+        """Create or discard dock widgets so they match the stored list."""
+        while len(self.docks) > self.store.count():
+            dock = self.docks.pop()
+            dock.shutdown()
+            dock.close()
+            dock.deleteLater()
+        for index in range(len(self.docks), self.store.count()):
+            dock = Dock(self.store.dock(index), smoke_test=self.smoke_test, manager=self)
+            self.docks.append(dock)
+            dock.show()
+        # A removed dock shifts the ones after it onto new slices.
+        for index, dock in enumerate(self.docks):
+            dock.store.index = index
+
+    def initialise_shortcut(self):
+        if self.store.data["shortcut_enabled"]:
+            self.configure_shortcut(True, self.store.data["shortcut"])
+
+    def configure_shortcut(self, enabled, sequence):
+        if self.smoke_test:
+            return True
+        if not enabled:
+            self.shortcut.unregister()
+            return True
+        error = self.shortcut.register(sequence)
+        if error and self.docks:
+            self.docks[0].show_error(
+                error + " You can also bind 'flowdocks --toggle' in your desktop keyboard settings.")
+        return not error
+
+    def toggle_all(self):
+        # Any dock still showing means the gesture should hide, not reveal.
+        if any(dock.isVisible() and not dock.manual_hidden for dock in self.docks):
+            for dock in self.docks:
+                if not dock.manual_hidden:
+                    dock.toggle_visibility()
+        else:
+            self.reveal_all()
+
+    def reveal_all(self):
+        for dock in self.docks:
+            dock.reveal()
+
+    def open_preferences(self):
+        if self.docks:
+            self.docks[0].open_settings()
+
+    def add_dock(self):
+        if self.store.add_dock() is None:
+            if self.docks:
+                self.docks[0].show_error(
+                    f"FlowDocks supports up to {MAX_DOCKS} docks. Remove one before adding another.")
+            return False
+        self.sync()
+        self.docks[-1].reveal()
+        return True
+
+    def remove_dock(self, dock):
+        if not self.store.remove_dock(dock.store.index):
+            dock.show_error("The last dock cannot be removed; quit FlowDocks instead.")
+            return False
+        self.sync()
+        return True
+
+    def close(self):
+        self.shortcut.close()
+        for dock in self.docks:
+            dock.shutdown()
+            dock.pool.waitForDone(10000)

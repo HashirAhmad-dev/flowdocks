@@ -1,7 +1,7 @@
 # FlowDocks
 
 [![CI](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml/badge.svg)](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/Release-v0.4.0-blue.svg)](https://github.com/HashirAhmad-dev/flowdocks/releases)
+[![Release](https://img.shields.io/badge/Release-v0.5.0-blue.svg)](https://github.com/HashirAhmad-dev/flowdocks/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41cd52.svg)](https://pypi.org/project/PyQt6/)
@@ -21,6 +21,11 @@ desktops.
   placement, and dropping never moves the source file.
 - **Arrange by dragging** — reorder pinned icons along the dock, or drag one off
   it to unpin.
+- **Separators** group icons the way Nexus Dock does. Add one from the dock menu,
+  drag it anywhere along the dock, and drag it off to remove it.
+- **Up to five docks at once**, each with its own pinned apps, edge, orientation,
+  theme, size and layer. Add or remove them from the Docks menu; one shortcut
+  shows and hides them all.
 - **Place it anywhere** — snap to any screen edge on any monitor, or switch to
   free positioning and drop it wherever you like, rotated horizontally or
   vertically.
@@ -34,6 +39,8 @@ desktops.
 - **Control your desktop's own panel** — hide, show, move or configure it without
   leaving the dock.
 - **Nothing behind your back** — no root, no service, no network, no telemetry.
+
+![Three docks at once, each with its own theme, size and edge](docs/images/multiple-docks.png)
 
 <p align="center">
   <img src="docs/images/free-vertical.png" alt="A free-positioned vertical dock" height="330">
@@ -64,7 +71,7 @@ Download the `.deb` from the
 [releases page](https://github.com/HashirAhmad-dev/flowdocks/releases):
 
 ```bash
-sudo apt install ./flowdocks_0.4.0_all.deb
+sudo apt install ./flowdocks_0.5.0_all.deb
 flowdocks
 ```
 

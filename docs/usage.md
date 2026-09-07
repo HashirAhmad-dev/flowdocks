@@ -30,6 +30,34 @@ than running off the edge; the rest stay reachable in the application picker.
 - **Reorder** by dragging a pinned icon along the dock.
 - **Unpin** by dragging an icon off the dock, or through the right-click menu.
 
+## Separators
+
+A separator is a divider that sits in the dock like an icon, for grouping
+applications. Add one with **Add separator** from the dock menu, or **Insert
+separator here** from an icon's menu to place it before that icon.
+
+Drag a separator to move it, exactly like an icon. Remove it by dragging it off
+the dock, or with **Remove separator** from its own right-click menu. Separators
+do not magnify on hover, and several can be used in one dock — each is tracked by
+its position, so removing one never removes a different one.
+
+## Multiple docks
+
+FlowDocks runs up to **five docks at once**. Each is fully independent: its own
+pinned applications and separators, screen edge or free position, orientation,
+theme, icon size, opacity, auto-hide and screen layer.
+
+Use the **Docks** submenu in any dock's right-click menu:
+
+- **Add another dock** — a new dock appears on the first free screen edge. The
+  entry greys out once five exist.
+- **Remove this dock** — removes the dock you opened the menu from. The last
+  remaining dock cannot be removed; quit FlowDocks instead.
+
+What the docks share is the global shortcut, the tray icon, and the `--toggle`
+and `--preferences` commands, all of which act on every dock at once. Preferences
+opened from a dock edits that dock, except the shortcut, which is shared.
+
 ## Placing the dock
 
 Drag the clock, the small grip on the dock's surface, or any empty part of the

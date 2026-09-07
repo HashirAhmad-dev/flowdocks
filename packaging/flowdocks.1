@@ -1,4 +1,4 @@
-.TH FLOWDOCKS 1 "September 2026" "FlowDocks 0.4.0" "User Commands"
+.TH FLOWDOCKS 1 "September 2026" "FlowDocks 0.5.0" "User Commands"
 .SH NAME
 flowdocks \- application dock for X11 desktops
 .SH SYNOPSIS
@@ -38,6 +38,16 @@ A launcher dropped from the desktop, a file manager or the applications
 menu is matched to the installed application by path, desktop-file ID and
 Exec line, so a copy or symlink of an installed entry pins correctly. A
 launcher that is not installed is refused.
+.PP
+A separator is a divider that sits in the dock like an icon. Add one with
+"Add separator" from the dock menu, drag it to move it, and drag it off
+the dock or use "Remove separator" to delete it. Several may be used; each
+is tracked by position, so removing one never removes another.
+.PP
+Up to five docks may run at once, each with its own pinned applications,
+edge, orientation, theme, size and layer. Add and remove them from the
+Docks submenu. The global shortcut and the \-\-toggle and \-\-preferences
+commands act on every dock at once.
 .PP
 Drag the clock, grip or empty dock surface to move the dock. In the
 default edge positioning it snaps to the nearest screen edge; in free
