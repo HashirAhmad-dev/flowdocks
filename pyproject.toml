@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-authors = [{ name = "Hashir Ahmad", email = "hashirahmad8055@gmail.com" }]
+authors = [{ name = "PrismoVector", email = "info@prismovector.com" }]
 keywords = ["dock", "launcher", "desktop", "x11", "pyqt6", "linux"]
 classifiers = [
     "Environment :: X11 Applications :: Qt",

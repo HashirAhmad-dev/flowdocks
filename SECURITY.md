@@ -8,7 +8,7 @@ The latest release receives fixes. Older tags do not.
 
 Please report privately through
 [GitHub Security Advisories](https://github.com/HashirAhmad-dev/flowdocks/security/advisories/new),
-or by email to hashirahmad8055@gmail.com. Do not open a public issue for a
+or by email to info@prismovector.com. Do not open a public issue for a
 vulnerability. Expect an acknowledgement within a few days.
 
 Please include the version, your desktop and session type, and the smallest

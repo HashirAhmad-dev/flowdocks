@@ -25,7 +25,7 @@ Things that are not acceptable:
 
 ## Enforcement
 
-Report unacceptable behaviour to hashirahmad8055@gmail.com. Reports are handled
+Report unacceptable behaviour to info@prismovector.com. Reports are handled
 confidentially. Maintainers may remove comments, commits, code, issues and other
 contributions that do not follow this Code of Conduct, and may ban temporarily or
 permanently any contributor for behaviour they consider inappropriate.

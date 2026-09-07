@@ -157,4 +157,4 @@ compositor — see [Troubleshooting](docs/troubleshooting.md#wayland).
 
 ## License
 
-Released under the [MIT License](LICENSE). Copyright © 2026 Hashir Ahmad.
+Released under the [MIT License](LICENSE). Copyright © 2026 PrismoVector.

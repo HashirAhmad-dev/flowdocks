@@ -10,7 +10,7 @@ flowdocks (0.4.0) unstable; urgency=medium
   * Replace the combo box arrows in preferences with a painted chevron, and
     restyle the drop-down lists to match the rest of the dialog.
 
- -- Hashir Ahmad <hashirahmad8055@gmail.com>  Mon, 07 Sep 2026 22:30:00 +0000
+ -- PrismoVector <info@prismovector.com>  Mon, 07 Sep 2026 22:30:00 +0000
 
 flowdocks (0.3.0) unstable; urgency=medium
 
@@ -30,7 +30,7 @@ flowdocks (0.3.0) unstable; urgency=medium
     GNOME and Budgie offer their settings dialog only. Unsupported actions are
     greyed out and explained rather than failing silently.
 
- -- Hashir Ahmad <hashirahmad8055@gmail.com>  Mon, 07 Sep 2026 21:00:00 +0000
+ -- PrismoVector <info@prismovector.com>  Mon, 07 Sep 2026 21:00:00 +0000
 
 flowdocks (0.2.0) unstable; urgency=medium
 
@@ -51,4 +51,4 @@ flowdocks (0.2.0) unstable; urgency=medium
   * Record unspecified project licensing; public distribution requires the
     owner's confirmation of distribution rights.
 
- -- Hashir Ahmad <hashirahmad8055@gmail.com>  Mon, 07 Sep 2026 00:00:00 +0000
+ -- PrismoVector <info@prismovector.com>  Mon, 07 Sep 2026 00:00:00 +0000

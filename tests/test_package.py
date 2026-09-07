@@ -47,7 +47,7 @@ class PackageTests(unittest.TestCase):
                 ("Package", "flowdocks"),
                 ("Version", "0.4.0"),
                 ("Architecture", "all"),
-                ("Maintainer", "Hashir Ahmad <hashirahmad8055@gmail.com>"),
+                ("Maintainer", "PrismoVector <info@prismovector.com>"),
                 ("Depends", "python3 (>= 3.10), python3-pyqt6 (>= 6.4), libx11-6, x11-utils, xdotool, libglib2.0-bin"),
                 ("Recommends", "papirus-icon-theme"),
             ):
