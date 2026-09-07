@@ -1,7 +1,7 @@
 # FlowDocks
 
 [![CI](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml/badge.svg)](https://github.com/HashirAhmad-dev/flowdocks/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/HashirAhmad-dev/flowdocks?sort=semver)](https://github.com/HashirAhmad-dev/flowdocks/releases)
+[![Release](https://img.shields.io/badge/Release-v0.4.0-blue.svg)](https://github.com/HashirAhmad-dev/flowdocks/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41cd52.svg)](https://pypi.org/project/PyQt6/)

@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  # No test may depend on another module having set this during import.
+  QT_QPA_PLATFORM: offscreen
+  QT_QPA_PLATFORMTHEME: ""
+
 jobs:
   test:
     name: Tests and package
@@ -18,24 +23,42 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             python3-pyqt6 x11-utils xdotool libglib2.0-bin \
-            libxcb-cursor0 libxkbcommon-x11-0 xvfb xauth lintian
+            libxcb-cursor0 libxkbcommon-x11-0 libgl1 \
+            xvfb xauth xfwm4 xfce4-panel dbus-x11 lintian
+
+      - name: Report versions
+        run: |
+          python3 --version
+          python3 -c 'from PyQt6.QtCore import QT_VERSION_STR, PYQT_VERSION_STR; print("Qt", QT_VERSION_STR, "PyQt", PYQT_VERSION_STR)'
+          lintian --version
+          dpkg-deb --version | head -1
 
       - name: Unit and offscreen UI tests
         run: python3 -m unittest discover -s tests -v
 
-      - name: Isolated X11, panel and application tests
+      # The isolated suites start their own Xvfb, D-Bus session and window
+      # manager. FLOWDOCKS_TEST_GIO is deliberately not set here: it asserts that
+      # a real `gio launch` succeeds, which needs a session bus this runner has
+      # no reason to provide, and it covers no CI-relevant behaviour.
+      - name: Isolated X11 and desktop panel tests
         env:
-          FLOWDOCKS_TEST_GIO: "1"
           FLOWDOCKS_TEST_X11: "1"
+          FLOWDOCKS_TEST_PANEL: "1"
         run: python3 -m unittest discover -s tests -v
 
       - name: Build the Debian package
         run: ./scripts/build-deb.sh
 
+      # Warnings differ between Debian and Ubuntu lintian releases, so the gate
+      # is on errors; the full report is still printed for review.
       - name: Lint the package
-        run: lintian dist/flowdocks_*.deb
+        run: |
+          lintian dist/flowdocks_*.deb || true
+          lintian --fail-on error dist/flowdocks_*.deb
 
       - uses: actions/upload-artifact@v4
         with:
           name: flowdocks-deb
-          path: dist/flowdocks_*.deb
+          path: |
+            dist/flowdocks_*.deb
+            dist/flowdocks_*.deb.sha256
