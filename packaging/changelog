@@ -1,3 +1,21 @@
+flowdocks (0.7.0) unstable; urgency=medium
+
+  * Pin folders, drives and files. Drag one from a file manager onto the dock,
+    or use "Pin a folder..." / "Pin a file..." in the dock menu. A file's menu
+    also offers "Open containing folder". A pinned drive drops off the dock
+    while it is unmounted and returns when it is mounted again.
+  * Clicking a pinned folder or drive opens it in the file manager -- the
+    running desktop's own first, then any installed one, then the freedesktop
+    file-manager D-Bus service -- rather than following the inode/directory
+    MIME default, which distros and editors such as VS Code often claim.
+  * Refresh the application catalogue automatically. It is watched for changes
+    and rescanned on drag, so an app installed since the dock started -- a
+    Chrome/Chromium "install as app" launcher such as Google Gemini, for
+    instance -- can be pinned without restarting. A drop that still cannot be
+    matched now reports why instead of being ignored silently.
+
+ -- PrismoVector <info@prismovector.com>  Tue, 08 Sep 2026 21:30:00 +0000
+
 flowdocks (0.6.0) unstable; urgency=medium
 
   * Relicense from MIT to a proprietary all-rights-reserved licence. The source

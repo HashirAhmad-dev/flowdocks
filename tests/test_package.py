@@ -5,6 +5,7 @@ import hashlib
 import io
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tarfile
@@ -13,6 +14,9 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+VERSION = re.search(
+    r'__version__\s*=\s*"([^"]+)"', (ROOT / "flowdocks/__init__.py").read_text()
+).group(1)
 RUNTIME = (
     "main.py",
     "flowdocks/__init__.py",
@@ -42,10 +46,10 @@ class PackageTests(unittest.TestCase):
                 ["sh", str(project / "scripts/build-deb.sh")],
                 cwd=temporary, check=True, capture_output=True, text=True,
             )
-            package = project / "dist/flowdocks_0.6.0_all.deb"
+            package = project / f"dist/flowdocks_{VERSION}_all.deb"
             for field, expected in (
                 ("Package", "flowdocks"),
-                ("Version", "0.6.0"),
+                ("Version", VERSION),
                 ("Architecture", "all"),
                 ("Maintainer", "PrismoVector <info@prismovector.com>"),
                 ("Depends", "python3 (>= 3.10), python3-pyqt6 (>= 6.4), libx11-6, x11-utils, xdotool, libglib2.0-bin"),

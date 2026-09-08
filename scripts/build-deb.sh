@@ -3,7 +3,7 @@ set -eu
 
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 package=flowdocks
-version=0.6.0
+version=0.7.0
 output_dir="$project_root/dist"
 artifact="${package}_${version}_all.deb"
 

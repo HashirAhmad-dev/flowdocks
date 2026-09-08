@@ -7,13 +7,20 @@ changelog at `packaging/changelog` carries the same history.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-08
+
 ### Added
 - Pin folders, drives and files. Drag one from a file manager onto the dock, or
-  use **Pin a folder... / Pin a file...** in the dock menu. Clicking it opens it
-  in the default handler (`gio open`, falling back to `xdg-open`); a file's menu
-  also offers **Open containing folder**. Pins carry a `path:` prefix in the
-  `pinned` list and resolve on each rebuild, so an unmounted drive drops out of
-  the dock and returns when it is back.
+  use **Pin a folder... / Pin a file...** in the dock menu. Clicking a folder or
+  drive opens it in the file manager; clicking a file opens it in its default
+  application, and a file's menu also offers **Open containing folder**. Pins
+  carry a `path:` prefix in the `pinned` list and resolve on each rebuild, so an
+  unmounted drive drops out of the dock and returns when it is back.
+- Folders and drives open in the desktop's file manager (the running desktop's
+  own first, then any installed one, then the freedesktop file-manager D-Bus
+  service), bypassing the `inode/directory` MIME default — which distros and
+  editors such as VS Code frequently claim, so that a folder would otherwise
+  open in an editor.
 
 ### Fixed
 - Dragging an application onto the dock failed silently unless it was already in
@@ -121,6 +128,7 @@ Released under the project's former name.
 Initial version: a translucent animated dock with application discovery,
 pinned shortcuts, running-window indicators, preferences and optional autostart.
 
+[0.7.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.7.0
 [0.6.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.6.0
 [0.5.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.5.0
 [0.4.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.4.0
