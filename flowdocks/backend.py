@@ -514,6 +514,72 @@ def open_path(path: str) -> None:
         raise RuntimeError(f"Could not open {path}: {detail or 'no handler is registered for it'}")
 
 
+# Ordered by likelihood; the running desktop's own manager is tried first.
+_FILE_MANAGERS = (
+    "nautilus", "dolphin", "nemo", "caja", "thunar", "pcmanfm-qt", "pcmanfm",
+    "io.elementary.files", "pantheon-files", "krusader",
+)
+_DESKTOP_FILE_MANAGER = (
+    ("kde", "dolphin"), ("plasma", "dolphin"), ("lxqt", "pcmanfm-qt"),
+    ("gnome", "nautilus"), ("unity", "nautilus"), ("budgie", "nautilus"),
+    ("cinnamon", "nemo"), ("mate", "caja"), ("xfce", "thunar"),
+    ("lxde", "pcmanfm"), ("pantheon", "io.elementary.files"),
+)
+
+
+def _file_manager_order() -> list[str]:
+    desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").lower()
+    seen: set[str] = set()
+    order = []
+    for name in ([fm for key, fm in _DESKTOP_FILE_MANAGER if key in desktop]
+                 + list(_FILE_MANAGERS)):
+        if name not in seen:
+            seen.add(name)
+            order.append(name)
+    return order
+
+
+def open_in_file_manager(path: str) -> None:
+    """Open a directory in a file manager.
+
+    A folder or drive should land in the file manager whatever the
+    ``inode/directory`` MIME default is set to -- distros and editors
+    (VS Code, for one) love to claim it -- so this deliberately does not
+    go through ``xdg-open``. It launches the desktop's own file manager,
+    then any installed one, then the freedesktop file-manager D-Bus
+    service, and only falls back to the default handler if none exist.
+    """
+    for name in _file_manager_order():
+        executable = shutil.which(name)
+        if not executable:
+            continue
+        try:
+            subprocess.Popen(
+                [executable, path], start_new_session=True,
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL)
+            return
+        except OSError:
+            continue
+    gdbus = shutil.which("gdbus")
+    if gdbus:
+        try:
+            uri = Path(path).resolve().as_uri()
+            done = subprocess.run(
+                [gdbus, "call", "--session",
+                 "--dest", "org.freedesktop.FileManager1",
+                 "--object-path", "/org/freedesktop/FileManager1",
+                 "--method", "org.freedesktop.FileManager1.ShowFolders",
+                 f"['{uri}']", ""],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE, timeout=15, check=False)
+            if done.returncode == 0:
+                return
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    open_path(path)
+
+
 def _validated_dock(values: dict) -> dict:
     data = {**DEFAULT_DOCK, "pinned": []}
     for key, value in values.items():

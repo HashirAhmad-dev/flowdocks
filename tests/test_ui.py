@@ -318,16 +318,31 @@ class DockTests(unittest.TestCase):
         self.assertIn(("path", "Reports"), kinds)
         self.assertIn(token, self.dock.icons)
 
-    def test_clicking_a_path_pin_opens_it_via_backend(self):
+    def test_clicking_a_folder_pin_opens_the_file_manager_not_the_editor(self):
         folder = Path(self.directory.name) / "Docs"
         folder.mkdir()
         self.settings.data["pinned"].append(PATH_PIN_PREFIX + str(folder))
         self.dock.rebuild()
         pin = next(obj for kind, obj in self.dock.entries if kind == "path")
-        with patch("flowdocks.ui.open_path") as opener:
+        self.assertEqual(pin.kind, "folder")
+        with patch("flowdocks.ui.open_in_file_manager") as fm, patch("flowdocks.ui.open_path") as default:
             self.dock.open_pin(pin)
             self.dock.pool.waitForDone()
-        opener.assert_called_once_with(str(folder))
+        fm.assert_called_once_with(str(folder))
+        default.assert_not_called()
+
+    def test_clicking_a_file_pin_uses_the_default_handler(self):
+        target = Path(self.directory.name) / "note.txt"
+        target.write_text("x")
+        self.settings.data["pinned"].append(PATH_PIN_PREFIX + str(target))
+        self.dock.rebuild()
+        pin = next(obj for kind, obj in self.dock.entries if kind == "path")
+        self.assertEqual(pin.kind, "file")
+        with patch("flowdocks.ui.open_path") as default, patch("flowdocks.ui.open_in_file_manager") as fm:
+            self.dock.open_pin(pin)
+            self.dock.pool.waitForDone()
+        default.assert_called_once_with(str(target))
+        fm.assert_not_called()
 
     def test_unresolvable_path_pin_is_dropped_from_entries(self):
         self.settings.data["pinned"].append(PATH_PIN_PREFIX + "/no/such/place/xyz")

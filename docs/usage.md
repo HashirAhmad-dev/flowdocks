@@ -29,9 +29,11 @@ than running off the edge; the rest stay reachable in the application picker.
   entry pins correctly. A launcher for something that is not installed is refused.
 - **Pin a folder, drive or file** by dragging it from a file manager onto the
   dock, or with **Pin a folder...** / **Pin a file...** in the dock menu. Clicking
-  it opens it in the default handler; its right-click menu also offers **Open
-  containing folder** for a file. A pinned drive disappears from the dock while it
-  is unmounted and comes back when it is mounted again.
+  a folder or drive opens it in the file manager (the desktop's own where there
+  is one, otherwise any installed one); clicking a file opens it in its default
+  application, and its right-click menu also offers **Open containing folder**. A
+  pinned drive disappears from the dock while it is unmounted and comes back when
+  it is mounted again.
 - **Reorder** by dragging a pinned icon along the dock.
 - **Unpin** by dragging an icon off the dock, or through the right-click menu.
 

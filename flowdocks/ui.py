@@ -23,7 +23,8 @@ from . import panel as desktop_panel
 from .backend import (
     MAX_DOCKS, PATH_PIN_PREFIX, SEPARATOR, DesktopApp, SettingsStore, activate_window,
     app_matches_window, application_roots, autostart_enabled, describe_path, discover_apps,
-    launch_app, list_windows, open_path, resolve_dropped_desktops, set_autostart,
+    launch_app, list_windows, open_in_file_manager, open_path, resolve_dropped_desktops,
+    set_autostart,
 )
 from .x11 import GlobalShortcut, set_window_layer
 
@@ -1303,7 +1304,7 @@ class Dock(QWidget):
             if pin.kind == "file":
                 parent = str(Path(pin.path).parent)
                 menu.addAction("Open containing folder",
-                               lambda: self.run_worker(open_path, parent, failed=self.show_error))
+                               lambda: self.run_worker(open_in_file_manager, parent, failed=self.show_error))
             menu.addAction("Unpin from dock", lambda: self.remove_pin(slot))
             menu.addAction("Insert separator here",
                            lambda: self.add_separator(slot if slot is not None else None))
@@ -1357,11 +1358,13 @@ class Dock(QWidget):
         self.run_worker(launch_app, app, failed=self.show_error)
 
     def open_pin(self, pin):
-        """Open a pinned folder, drive or file with its default handler."""
+        """Open a pinned path: folders and drives in the file manager, a file
+        with its default application."""
         if time.monotonic() - self.launch_times.get(pin.id, -100) < 0.5:
             return
         self.launch_times[pin.id] = time.monotonic()
-        self.run_worker(open_path, pin.path, failed=self.show_error)
+        action = open_path if pin.kind == "file" else open_in_file_manager
+        self.run_worker(action, pin.path, failed=self.show_error)
 
     def browse_for_pin(self, folder):
         self.menu_open = True

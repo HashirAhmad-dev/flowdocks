@@ -125,6 +125,35 @@ class BackendTests(unittest.TestCase):
             b.open_path("/tmp/thing")
         self.assertIn("no handler", str(caught.exception))
 
+    def test_open_in_file_manager_ignores_the_mime_default(self):
+        # inode/directory may be bound to an editor; a folder must still browse.
+        self.which.side_effect = lambda name: "/usr/bin/thunar" if name == "thunar" else None
+        b.open_in_file_manager("/data/reports")
+        self.assertEqual(self.popen.call_args[0][0], ["/usr/bin/thunar", "/data/reports"])
+        self.run.assert_not_called()
+
+    def test_open_in_file_manager_prefers_the_desktop_native_one(self):
+        with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE"}):
+            self.which.side_effect = lambda n: f"/usr/bin/{n}" if n in ("dolphin", "thunar") else None
+            b.open_in_file_manager("/x")
+        self.assertEqual(self.popen.call_args[0][0], ["/usr/bin/dolphin", "/x"])
+
+    def test_open_in_file_manager_falls_back_to_the_dbus_service(self):
+        self.which.side_effect = lambda n: "/usr/bin/gdbus" if n == "gdbus" else None
+        self.run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
+        b.open_in_file_manager("/srv/data")
+        self.popen.assert_not_called()
+        argv = self.run.call_args[0][0]
+        self.assertIn("org.freedesktop.FileManager1.ShowFolders", argv)
+        self.assertTrue(any(str(a).startswith("['file://") for a in argv))
+
+    def test_open_in_file_manager_last_resort_is_the_default_handler(self):
+        self.which.side_effect = lambda n: None
+        self.run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
+        b.open_in_file_manager("/home/u/docs")
+        self.popen.assert_not_called()
+        self.assertEqual(self.run.call_args[0][0], ["xdg-open", "/home/u/docs"])
+
     def test_dropped_duplicates_collapse_to_one_app(self):
         installed = self.desktop("dup.desktop")
         apps = b.discover_apps()
