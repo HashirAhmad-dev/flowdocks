@@ -7,23 +7,23 @@ from pathlib import Path
 import time
 
 from PyQt6.QtCore import (
-    QMimeData, QObject, QPoint, QPointF, QRect, QRectF, QRunnable, QSize, Qt, QUrl,
-    QThreadPool, QTimer, pyqtSignal,
+    QFileSystemWatcher, QMimeData, QObject, QPoint, QPointF, QRect, QRectF, QRunnable,
+    QSize, Qt, QUrl, QThreadPool, QTimer, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QColor, QCursor, QDrag, QFont, QIcon, QKeySequence, QLinearGradient, QPainter,
     QPainterPath, QPen, QPixmap, QPolygonF, QRegion, QTransform,
 )
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout,
+    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout,
     QHBoxLayout, QKeySequenceEdit, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
     QMenu, QMessageBox, QPushButton, QScrollArea, QSlider, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 from . import panel as desktop_panel
 from .backend import (
-    MAX_DOCKS, SEPARATOR, DesktopApp, SettingsStore, activate_window, app_matches_window,
-    autostart_enabled, discover_apps, launch_app, list_windows,
-    resolve_dropped_desktops, set_autostart,
+    MAX_DOCKS, PATH_PIN_PREFIX, SEPARATOR, DesktopApp, SettingsStore, activate_window,
+    app_matches_window, application_roots, autostart_enabled, describe_path, discover_apps,
+    launch_app, list_windows, open_path, resolve_dropped_desktops, set_autostart,
 )
 from .x11 import GlobalShortcut, set_window_layer
 
@@ -103,14 +103,16 @@ class Worker(QRunnable):
             self.signals.failed.emit(str(error))
 
 
-def app_icon(app: DesktopApp | None = None, name="view-app-grid") -> QIcon:
+def app_icon(app: DesktopApp | None = None, name="view-app-grid", fallback="") -> QIcon:
     if app and app.icon:
         icon = QIcon(app.icon) if Path(app.icon).is_absolute() else QIcon.fromTheme(app.icon)
         if not icon.isNull():
             return icon
-    icon = QIcon.fromTheme(name if app is None else "application-x-executable")
-    if not icon.isNull():
-        return icon
+    for candidate in ([name, fallback] if app is None else ["application-x-executable"]):
+        if candidate:
+            icon = QIcon.fromTheme(candidate)
+            if not icon.isNull():
+                return icon
     pixmap = QPixmap(96, 96)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -486,6 +488,9 @@ class Dock(QWidget):
         self.grab_offset = QPoint()
         self.apps = discover_apps()
         self.catalog = {app.id: app for app in self.apps}
+        self.path_pins = {}
+        self.last_app_scan = time.monotonic()
+        self.app_watcher = None
         self.windows = []
         self.entries = []
         self.slots = []
@@ -534,6 +539,14 @@ class Dock(QWidget):
         self.poll_timer.setInterval(1800)
         self.poll_timer.timeout.connect(self.poll_windows)
         self.poll_timer.start()
+        if not smoke_test:
+            self.app_rescan_timer = QTimer(self)
+            self.app_rescan_timer.setSingleShot(True)
+            self.app_rescan_timer.setInterval(600)
+            self.app_rescan_timer.timeout.connect(self.refresh_apps)
+            self.app_watcher = QFileSystemWatcher(self)
+            self.watch_app_dirs()
+            self.app_watcher.directoryChanged.connect(self.app_dir_changed)
         app = QApplication.instance()
         app.screenAdded.connect(self.screens_changed)
         app.screenRemoved.connect(self.screens_changed)
@@ -549,6 +562,8 @@ class Dock(QWidget):
         """
         self.timer.stop()
         self.poll_timer.stop()
+        if self.app_watcher is not None:
+            self.app_rescan_timer.stop()
         self.tray.hide()
 
     def configure_shortcut(self, enabled, sequence):
@@ -617,8 +632,10 @@ class Dock(QWidget):
     def windows_received(self, windows):
         self.poll_busy = False
         self.windows = windows
-        signature = [(entry[0], entry[1].id if entry[0] == "app" else "") for entry in self.entries]
-        if signature != [(entry[0], entry[1].id if entry[0] == "app" else "") for entry in self.make_entries()[0]]:
+        # Also picks up a drive that has just been mounted or unmounted.
+        self.refresh_path_pins()
+        signature = [(entry[0], getattr(entry[1], "id", "")) for entry in self.entries]
+        if signature != [(entry[0], getattr(entry[1], "id", "")) for entry in self.make_entries()[0]]:
             if not self.dragging and not self.dock_dragging and not self.external_drag and self.pressed < 0:
                 self.rebuild()
         self.update()
@@ -637,6 +654,8 @@ class Dock(QWidget):
                 items.append(("separator", None, slot))
             elif token in self.catalog:
                 items.append(("app", self.catalog[token], slot))
+            elif token.startswith(PATH_PIN_PREFIX) and token in self.path_pins:
+                items.append(("path", self.path_pins[token], slot))
         claimed = {window.id for window in self.windows
                    if any(app_matches_window(app, window) for kind, app, _ in items if kind == "app")}
         for app in self.apps:
@@ -689,11 +708,31 @@ class Dock(QWidget):
         return screens[min(self.store.data["screen"], len(screens) - 1)]
 
     def rebuild(self):
+        self.refresh_path_pins()
         self.entries, self.slots = self.make_entries()
         self.scales = [1.0] * len(self.entries)
-        self.icons = {app.id: app_icon(app) for kind, app in self.entries if kind == "app"}
+        self.icons = self.build_icons()
         self.hover = self.pressed = -1
         self.reposition()
+
+    def refresh_path_pins(self):
+        """Re-resolve pinned folders/drives/files; unreachable ones drop out."""
+        resolved = {}
+        for token in self.store.data["pinned"]:
+            if token.startswith(PATH_PIN_PREFIX) and token not in resolved:
+                pin = describe_path(token)
+                if pin is not None:
+                    resolved[token] = pin
+        self.path_pins = resolved
+
+    def build_icons(self):
+        icons = {}
+        for kind, obj in self.entries:
+            if kind == "app":
+                icons[obj.id] = app_icon(obj)
+            elif kind == "path":
+                icons[obj.id] = app_icon(name=obj.icon, fallback=obj.fallback)
+        return icons
 
     def reposition(self, *_):
         screen = self.selected_screen().geometry()
@@ -847,7 +886,7 @@ class Dock(QWidget):
         if not 0 <= self.hover < len(self.entries):
             return ""
         kind, app = self.entries[self.hover]
-        if kind == "app":
+        if kind in ("app", "path"):
             return app.name
         if kind == "separator":
             return "Separator - drag to move, right-click to remove"
@@ -909,7 +948,7 @@ class Dock(QWidget):
                 glow.setAlpha(23)
                 painter.setBrush(glow)
                 painter.drawRoundedRect(rect.adjusted(-5, -5, 5, 5), 16, 16)
-            if kind == "app":
+            if kind in ("app", "path"):
                 draw_rect = QRectF(rect)
                 elapsed = time.monotonic() - self.launch_times.get(app.id, -100)
                 if elapsed < 1.3:
@@ -927,7 +966,7 @@ class Dock(QWidget):
                     painter.setClipRect(QRectF(rect.left(), rect.bottom() + 3, rect.width(), 9))
                     painter.drawPixmap(QRectF(rect.left(), rect.bottom() + 3, rect.width(), rect.height()), reflection, QRectF(reflection.rect()))
                     painter.restore()
-                matches = [w for w in self.windows if app_matches_window(app, w)]
+                matches = [w for w in self.windows if app_matches_window(app, w)] if kind == "app" else []
                 if matches:
                     painter.setPen(Qt.PenStyle.NoPen)
                     painter.setBrush(QColor(accent))
@@ -1053,7 +1092,7 @@ class Dock(QWidget):
             self.drag_dock(event.globalPosition().toPoint())
         elif self.pressed >= 0 and moved:
             kind, app = self.entries[self.pressed]
-            self.dragging = kind in ("app", "separator")
+            self.dragging = kind in ("app", "path", "separator")
             if self.dragging:
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 self.drag_point = event.position()
@@ -1094,7 +1133,7 @@ class Dock(QWidget):
         self.store.data["screen"] = QApplication.screens().index(screen)
         self.entries, self.slots = self.make_entries()
         self.scales = [1.0] * len(self.entries)
-        self.icons = {app.id: app_icon(app) for kind, app in self.entries if kind == "app"}
+        self.icons = self.build_icons()
         self.hidden_amount = 0
         self.hover = -1
         self.reposition()
@@ -1135,11 +1174,14 @@ class Dock(QWidget):
         self.save_settings()
         self.rebuild()
 
-    def insert_apps(self, app_ids, index):
+    def pinnable(self, token):
+        return token in self.catalog or token.startswith(PATH_PIN_PREFIX)
+
+    def insert_apps(self, tokens, index):
         pins = self.store.data["pinned"]
-        selected = list(dict.fromkeys(key for key in app_ids if key in self.catalog))
-        index -= sum(1 for key in pins[:index] if key in selected)
-        pins[:] = [key for key in pins if key not in selected]
+        selected = list(dict.fromkeys(token for token in tokens if self.pinnable(token)))
+        index -= sum(1 for token in pins[:index] if token in selected)
+        pins[:] = [token for token in pins if token not in selected]
         pins[index:index] = selected
         self.save_settings()
         self.rebuild()
@@ -1180,6 +1222,8 @@ class Dock(QWidget):
                     self.run_worker(activate_window, matches[-1].id)
                 else:
                     self.launch(app)
+            elif kind == "path":
+                self.open_pin(app)
             elif kind == "launcher":
                 self.open_picker()
             elif kind == "settings":
@@ -1251,10 +1295,25 @@ class Dock(QWidget):
             for window in [w for w in self.windows if app_matches_window(app, w)]:
                 menu.addAction(window.title[:65] or "Activate window", lambda checked=False, key=window.id: self.run_worker(activate_window, key))
             menu.addSeparator()
+        elif index >= 0 and self.entries[index][0] == "path":
+            pin = self.entries[index][1]
+            heading = menu.addAction(pin.name)
+            heading.setEnabled(False)
+            menu.addAction("Open", lambda: self.open_pin(pin))
+            if pin.kind == "file":
+                parent = str(Path(pin.path).parent)
+                menu.addAction("Open containing folder",
+                               lambda: self.run_worker(open_path, parent, failed=self.show_error))
+            menu.addAction("Unpin from dock", lambda: self.remove_pin(slot))
+            menu.addAction("Insert separator here",
+                           lambda: self.add_separator(slot if slot is not None else None))
+            menu.addSeparator()
         menu.addAction("Applications...", self.open_picker)
         menu.addAction("Preferences...", self.open_settings)
         menu.addAction("Refresh applications", self.refresh_apps)
         menu.addAction("Add separator", self.add_separator)
+        menu.addAction("Pin a folder...", lambda: self.browse_for_pin(folder=True))
+        menu.addAction("Pin a file...", lambda: self.browse_for_pin(folder=False))
         menu.addAction("Hide dock", self.toggle_visibility)
         edges = menu.addMenu("Screen edge")
         for edge in ("bottom", "top", "left", "right"):
@@ -1297,6 +1356,33 @@ class Dock(QWidget):
         self.launch_times[app.id] = time.monotonic()
         self.run_worker(launch_app, app, failed=self.show_error)
 
+    def open_pin(self, pin):
+        """Open a pinned folder, drive or file with its default handler."""
+        if time.monotonic() - self.launch_times.get(pin.id, -100) < 0.5:
+            return
+        self.launch_times[pin.id] = time.monotonic()
+        self.run_worker(open_path, pin.path, failed=self.show_error)
+
+    def browse_for_pin(self, folder):
+        self.menu_open = True
+        try:
+            if folder:
+                chosen = QFileDialog.getExistingDirectory(
+                    self, "Pin a folder to the dock", str(Path.home()))
+            else:
+                chosen, _ = QFileDialog.getOpenFileName(
+                    self, "Pin a file to the dock", str(Path.home()))
+        finally:
+            self.menu_open = False
+            self.last_inside = time.monotonic()
+        if not chosen:
+            return
+        pin = describe_path(chosen)
+        if pin is None:
+            self.show_error("That item could not be pinned to the dock.")
+            return
+        self.insert_apps([pin.token], len(self.store.data["pinned"]))
+
     def show_error(self, message):
         if self.tray.isVisible():
             self.tray.showMessage("FlowDocks", message, QSystemTrayIcon.MessageIcon.Warning, 6000)
@@ -1324,9 +1410,40 @@ class Dock(QWidget):
     def apps_received(self, apps):
         self.apps = apps
         self.catalog = {app.id: app for app in apps}
+        self.last_app_scan = time.monotonic()
         self.rebuild()
         if isinstance(self.dialog, AppPicker):
             self.dialog.populate()
+
+    def watch_app_dirs(self):
+        """Watch every existing XDG `applications` directory for new entries."""
+        if self.app_watcher is None:
+            return
+        wanted = [str(path) for path in application_roots() if path.is_dir()]
+        current = set(self.app_watcher.directories())
+        fresh = [path for path in wanted if path not in current]
+        if fresh:
+            self.app_watcher.addPaths(fresh)
+
+    def app_dir_changed(self, _path):
+        """Coalesce a burst of file events into one background rescan.
+
+        A newly installed app (or one Chrome/Chromium just wrote as a PWA
+        launcher) shows up without restarting the dock or using the menu.
+        """
+        self.watch_app_dirs()
+        self.app_rescan_timer.start()
+
+    def rescan_apps_now(self, force=False):
+        """Refresh the catalogue on the calling thread; throttled so drag events stay cheap."""
+        if not force and time.monotonic() - self.last_app_scan < 2.0:
+            return
+        try:
+            self.apps = discover_apps()
+        except OSError:
+            return
+        self.catalog = {app.id: app for app in self.apps}
+        self.last_app_scan = time.monotonic()
 
     def show_dialog(self, dialog_type):
         self.reveal()
@@ -1358,15 +1475,37 @@ class Dock(QWidget):
             self.open_settings()
 
     def dropped_apps(self, mime):
+        """Tokens a drop would pin: installed-app ids, then folder/drive/file pins."""
         if mime.hasFormat(APP_MIME):
             app_id = bytes(mime.data(APP_MIME)).decode("utf-8", errors="replace")
             return [app_id] if app_id in self.catalog else []
-        paths = [url.toLocalFile() for url in mime.urls() if url.isLocalFile()]
-        # Only installed apps are accepted, not arbitrary downloaded launchers.
-        return [app.id for app in resolve_dropped_desktops(paths, self.apps)]
+        tokens = []
+        for url in mime.urls():
+            if not url.isLocalFile():
+                continue
+            raw = url.toLocalFile()
+            matched = resolve_dropped_desktops([raw], self.apps)
+            if matched:
+                if matched[0].id not in tokens:
+                    tokens.append(matched[0].id)
+                continue
+            # A raw .desktop launcher that is not installed is never pinned.
+            if raw.endswith(".desktop"):
+                continue
+            pin = describe_path(raw)
+            if pin is not None and pin.token not in tokens:
+                tokens.append(pin.token)
+        return tokens
+
+    def has_local_urls(self, mime):
+        return any(url.isLocalFile() for url in mime.urls())
 
     def dragEnterEvent(self, event):
-        if self.dropped_apps(event.mimeData()):
+        mime = event.mimeData()
+        if not self.dropped_apps(mime) and self.has_local_urls(mime):
+            # An app installed since startup is not in the catalogue yet.
+            self.rescan_apps_now()
+        if self.dropped_apps(mime):
             self.external_drag = True
             self.reveal()
             self.dragMoveEvent(event)
@@ -1385,13 +1524,23 @@ class Dock(QWidget):
         self.update()
 
     def dropEvent(self, event):
-        app_ids = self.dropped_apps(event.mimeData())
+        mime = event.mimeData()
+        tokens = self.dropped_apps(mime)
+        if not tokens and not mime.hasFormat(APP_MIME) and self.has_local_urls(mime):
+            # Last chance: an app installed moments ago may not be catalogued yet.
+            self.rescan_apps_now(force=True)
+            tokens = self.dropped_apps(mime)
         self.external_drag = False
         self.drop_index = None
-        if not app_ids:
+        if not tokens:
+            self.update()
+            if self.has_local_urls(mime) and not self.smoke_test:
+                self.show_error(
+                    "FlowDocks could not pin that. Drop an installed application, a "
+                    "folder, a drive or a file.")
             event.ignore()
             return
-        self.insert_apps(app_ids, self.insertion_index(event.position()))
+        self.insert_apps(tokens, self.insertion_index(event.position()))
         event.setDropAction(Qt.DropAction.CopyAction)
         event.accept()
 

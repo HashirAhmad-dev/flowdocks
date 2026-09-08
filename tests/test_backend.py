@@ -86,6 +86,45 @@ class BackendTests(unittest.TestCase):
                 self.assertEqual(b.resolve_dropped_desktops([str(path)], apps), [])
         self.assertEqual(b.resolve_dropped_desktops(["", None], apps), [])
 
+    def test_describe_path_classifies_folder_and_file(self):
+        folder = self.root / "Pictures"
+        folder.mkdir()
+        document = self.root / "notes.pdf"
+        document.write_text("x", encoding="utf-8")
+        pin = b.describe_path(str(folder))
+        self.assertEqual((pin.kind, pin.name, pin.icon), ("folder", "Pictures", "folder-pictures"))
+        self.assertEqual(pin.token, b.PATH_PIN_PREFIX + str(folder.resolve()))
+        filepin = b.describe_path(str(document))
+        self.assertEqual((filepin.kind, filepin.icon), ("file", "application-pdf"))
+
+    def test_describe_path_round_trips_its_own_token(self):
+        folder = self.root / "Work"
+        folder.mkdir()
+        first = b.describe_path(str(folder))
+        again = b.describe_path(first.token)
+        self.assertEqual(again.token, first.token)
+
+    def test_describe_path_rejects_missing_and_blank(self):
+        self.assertIsNone(b.describe_path(str(self.root / "gone")))
+        self.assertIsNone(b.describe_path(""))
+        self.assertIsNone(b.describe_path(None))
+
+    def test_describe_path_marks_media_mounts_as_drives(self):
+        mount = self.root / "media" / "usb"
+        mount.mkdir(parents=True)
+        with patch.object(b, "_is_drive", return_value=True):
+            pin = b.describe_path(str(mount))
+        self.assertEqual(pin.kind, "drive")
+
+    def test_open_path_uses_default_handler_and_reports_failure(self):
+        self.run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
+        b.open_path("/tmp/thing")
+        self.assertEqual(self.run.call_args[0][0][-1], "/tmp/thing")
+        self.run.return_value = subprocess.CompletedProcess([], 3, b"", b"no handler")
+        with self.assertRaises(RuntimeError) as caught:
+            b.open_path("/tmp/thing")
+        self.assertIn("no handler", str(caught.exception))
+
     def test_dropped_duplicates_collapse_to_one_app(self):
         installed = self.desktop("dup.desktop")
         apps = b.discover_apps()

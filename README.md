@@ -19,6 +19,10 @@ desktops.
 - **Pin anything installed** — drag from the built-in application picker, your
   desktop, a file manager or the applications menu. An insertion marker previews
   placement, and dropping never moves the source file.
+- **Pin folders, drives and files** — drag one from a file manager, or use
+  **Pin a folder / Pin a file** in the dock menu. Clicking it opens it in the
+  default handler; a pinned drive drops out while it is unmounted and returns
+  when it is back.
 - **Arrange by dragging** — reorder pinned icons along the dock, or drag one off
   it to unpin.
 - **Separators** group icons the way Nexus Dock does. Add one from the dock menu,

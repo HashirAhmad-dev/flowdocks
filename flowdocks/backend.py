@@ -5,6 +5,7 @@ from __future__ import annotations
 import configparser
 from dataclasses import dataclass
 import json
+import mimetypes
 import os
 from pathlib import Path
 import re
@@ -111,18 +112,22 @@ def _locales() -> list[str]:
     return result
 
 
-def discover_apps() -> list[DesktopApp]:
-    """Read XDG application entries; higher-priority IDs also mask hidden entries."""
+def application_roots() -> list[Path]:
+    """The XDG `applications` directories, most specific first."""
     roots = [_xdg_home("XDG_DATA_HOME", ".local/share")]
     roots.extend(Path(value) for value in
                  (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
                  if value and Path(value).is_absolute())
+    return [root / "applications" for root in roots]
+
+
+def discover_apps() -> list[DesktopApp]:
+    """Read XDG application entries; higher-priority IDs also mask hidden entries."""
     desktops = set(filter(None, os.environ.get("XDG_CURRENT_DESKTOP", "").split(":")))
     locales = _locales()
     seen: set[str] = set()
     apps = []
-    for root in roots:
-        directory = root / "applications"
+    for directory in application_roots():
         try:
             paths = sorted(directory.rglob("*.desktop"))
         except OSError:
@@ -388,6 +393,125 @@ def resolve_dropped_desktops(paths, apps: list[DesktopApp]) -> list[DesktopApp]:
         if match is not None and match not in found:
             found.append(match)
     return found
+
+
+PATH_PIN_PREFIX = "path:"
+
+_USER_DIR_ICONS = {
+    "desktop": "user-desktop",
+    "documents": "folder-documents",
+    "download": "folder-download",
+    "downloads": "folder-download",
+    "music": "folder-music",
+    "pictures": "folder-pictures",
+    "videos": "folder-videos",
+    "public": "folder-publicshare",
+    "templates": "folder-templates",
+}
+
+_MIME_EXACT_ICONS = {
+    "application/pdf": "application-pdf",
+    "application/zip": "package-x-generic",
+    "application/gzip": "package-x-generic",
+    "application/x-tar": "package-x-generic",
+    "application/x-7z-compressed": "package-x-generic",
+    "application/x-rar-compressed": "package-x-generic",
+    "application/vnd.debian.binary-package": "package-x-generic",
+    "application/x-rpm": "package-x-generic",
+}
+
+
+@dataclass
+class PathPin:
+    """A pinned folder, drive or file. `token` is what lands in `pinned`."""
+
+    token: str
+    path: str
+    name: str
+    icon: str
+    fallback: str
+    kind: str  # "folder" | "drive" | "file"
+
+    @property
+    def id(self) -> str:
+        return self.token
+
+
+def _is_drive(path: Path) -> bool:
+    text = str(path)
+    if any(text.startswith(root + os.sep) for root in ("/media", "/run/media", "/mnt")):
+        return True
+    try:
+        return text != os.sep and os.path.ismount(text)
+    except OSError:
+        return False
+
+
+def _folder_icon(path: Path) -> str:
+    try:
+        if path == Path.home():
+            return "user-home"
+    except (OSError, RuntimeError):
+        pass
+    return _USER_DIR_ICONS.get(path.name.casefold(), "folder")
+
+
+def _file_icon(path: Path) -> str:
+    mime, _ = mimetypes.guess_type(str(path))
+    if not mime:
+        return "text-x-generic"
+    if mime in _MIME_EXACT_ICONS:
+        return _MIME_EXACT_ICONS[mime]
+    group = mime.split("/", 1)[0]
+    if group in ("audio", "video", "image", "text", "font"):
+        return f"{group}-x-generic"
+    return "text-x-generic"
+
+
+def describe_path(raw: str) -> PathPin | None:
+    """Resolve a filesystem path to a folder, drive or file pin, or None.
+
+    The path must exist now; a pin to a drive that is not mounted simply drops
+    out of the dock until it comes back.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    if raw.startswith(PATH_PIN_PREFIX):
+        raw = raw[len(PATH_PIN_PREFIX):]
+    try:
+        resolved = Path(raw).expanduser().resolve()
+        exists = resolved.exists()
+    except (OSError, RuntimeError):
+        return None
+    if not exists:
+        return None
+    token = PATH_PIN_PREFIX + str(resolved)
+    name = resolved.name or str(resolved)
+    if _is_drive(resolved):
+        removable = any(str(resolved).startswith(root + os.sep)
+                        for root in ("/media", "/run/media"))
+        icon = "drive-removable-media" if removable else "drive-harddisk"
+        return PathPin(token, str(resolved), name, icon, "drive-harddisk", "drive")
+    if resolved.is_dir():
+        return PathPin(token, str(resolved), name, _folder_icon(resolved), "folder", "folder")
+    if resolved.is_file():
+        return PathPin(token, str(resolved), name, _file_icon(resolved), "text-x-generic", "file")
+    return None
+
+
+def open_path(path: str) -> None:
+    """Open a folder or file with the desktop's default handler."""
+    gio = shutil.which("gio")
+    argv = [gio, "open", path] if gio else [shutil.which("xdg-open") or "xdg-open", path]
+    try:
+        completed = subprocess.run(
+            argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE, timeout=15, check=False)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise RuntimeError(f"Could not open {path}: {error}") from error
+    if completed.returncode:
+        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"Could not open {path}: {detail or 'no handler is registered for it'}")
 
 
 def _validated_dock(values: dict) -> dict:

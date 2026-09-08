@@ -5,6 +5,24 @@ All notable changes to FlowDocks are recorded here. The format follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html). The packaged Debian
 changelog at `packaging/changelog` carries the same history.
 
+## [Unreleased]
+
+### Added
+- Pin folders, drives and files. Drag one from a file manager onto the dock, or
+  use **Pin a folder... / Pin a file...** in the dock menu. Clicking it opens it
+  in the default handler (`gio open`, falling back to `xdg-open`); a file's menu
+  also offers **Open containing folder**. Pins carry a `path:` prefix in the
+  `pinned` list and resolve on each rebuild, so an unmounted drive drops out of
+  the dock and returns when it is back.
+
+### Fixed
+- Dragging an application onto the dock failed silently unless it was already in
+  the catalogue when the dock started, so anything installed since — including
+  Chrome/Chromium "install as app" launchers such as Google Gemini — could not be
+  pinned. The `applications` directories are now watched for changes, a drag also
+  triggers a rescan, and a drop that still cannot be matched explains why instead
+  of doing nothing.
+
 ## [0.6.0] - 2026-09-08
 
 ### Changed

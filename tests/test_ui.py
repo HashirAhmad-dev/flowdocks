@@ -15,7 +15,9 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMenu
 
 from flowdocks import panel
-from flowdocks.backend import MAX_DOCKS, SEPARATOR, DesktopApp, SettingsStore, WindowInfo
+from flowdocks.backend import (
+    MAX_DOCKS, PATH_PIN_PREFIX, SEPARATOR, DesktopApp, SettingsStore, WindowInfo,
+)
 from flowdocks.ui import APP_MIME, DockManager, AppPicker, Dock, SettingsDialog, limit_to_one_combination
 
 
@@ -272,6 +274,65 @@ class DockTests(unittest.TestCase):
         self.assertEqual(self.dock.dropped_apps(mime), [])
         mime.setUrls([QUrl.fromLocalFile(self.apps[0].path)])
         self.assertEqual(self.dock.dropped_apps(mime), ["browser.desktop"])
+
+    def test_drop_rescans_for_app_installed_after_startup(self):
+        late = Path(self.directory.name) / "late.desktop"
+        late.write_text("[Desktop Entry]\nType=Application\nName=Late\nExec=late\n")
+        app = DesktopApp("late.desktop", "Late", "late", path=str(late))
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(late))])
+        self.assertEqual(self.dock.dropped_apps(mime), [])
+        point = self.dock.rects[-2].center()
+        with patch("flowdocks.ui.discover_apps", return_value=[*self.apps, app]):
+            event = QDropEvent(point, Qt.DropAction.CopyAction, mime,
+                               Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+            self.dock.dropEvent(event)
+        self.assertTrue(event.isAccepted())
+        self.assertIn("late.desktop", self.settings.data["pinned"])
+
+    def test_drop_of_missing_path_is_rejected_without_pinning(self):
+        pinned = list(self.settings.data["pinned"])
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(Path(self.directory.name) / "gone-xyz"))])
+        point = self.dock.rects[-2].center()
+        with patch.object(self.dock, "show_error"):
+            event = QDropEvent(point, Qt.DropAction.CopyAction, mime,
+                               Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+            self.dock.dropEvent(event)
+        self.assertFalse(event.isAccepted())
+        self.assertEqual(self.settings.data["pinned"], pinned)
+
+    def test_drop_folder_pins_it_and_renders(self):
+        folder = Path(self.directory.name) / "Reports"
+        folder.mkdir()
+        token = PATH_PIN_PREFIX + str(folder)
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(folder))])
+        point = self.dock.rects[-2].center()
+        event = QDropEvent(point, Qt.DropAction.CopyAction, mime,
+                           Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        self.dock.dropEvent(event)
+        self.assertTrue(event.isAccepted())
+        self.assertIn(token, self.settings.data["pinned"])
+        kinds = [(kind, getattr(obj, "name", None)) for kind, obj in self.dock.entries]
+        self.assertIn(("path", "Reports"), kinds)
+        self.assertIn(token, self.dock.icons)
+
+    def test_clicking_a_path_pin_opens_it_via_backend(self):
+        folder = Path(self.directory.name) / "Docs"
+        folder.mkdir()
+        self.settings.data["pinned"].append(PATH_PIN_PREFIX + str(folder))
+        self.dock.rebuild()
+        pin = next(obj for kind, obj in self.dock.entries if kind == "path")
+        with patch("flowdocks.ui.open_path") as opener:
+            self.dock.open_pin(pin)
+            self.dock.pool.waitForDone()
+        opener.assert_called_once_with(str(folder))
+
+    def test_unresolvable_path_pin_is_dropped_from_entries(self):
+        self.settings.data["pinned"].append(PATH_PIN_PREFIX + "/no/such/place/xyz")
+        self.dock.rebuild()
+        self.assertNotIn("path", [kind for kind, _ in self.dock.entries])
 
     def test_overflow_keeps_geometry_on_screen(self):
         self.dock.apps = [DesktopApp(f"app{i}.desktop", f"App {i}", f"app{i}") for i in range(100)]

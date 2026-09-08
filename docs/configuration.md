@@ -30,6 +30,11 @@ A `"|"` in `pinned` is a separator rather than an application. Several may
 appear, and FlowDocks addresses them by position, so identical ones stay
 distinct when you move or remove one.
 
+An entry beginning `path:` is a pinned folder, drive or file, followed by its
+absolute path (for example `path:/home/you/Projects`). It is resolved each time
+the dock rebuilds; if the path is gone — an unmounted drive, a deleted folder —
+the entry is skipped until it exists again.
+
 ## Shared keys
 
 | Key | Type | Default | Meaning |
