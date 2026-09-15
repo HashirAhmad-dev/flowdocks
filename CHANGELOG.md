@@ -7,6 +7,23 @@ changelog at `packaging/changelog` carries the same history.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-15
+
+### Added
+- A Trash icon. Add one with **Add trash icon** in the dock menu, then drag
+  files or folders from a file manager onto it to move them to the desktop
+  trash (via the freedesktop Trash spec, so it is recoverable there). It fills
+  and empties to match, click opens the Trash in the file manager, and its
+  menu adds **Empty Trash** and **Remove trash icon**.
+
+### Changed
+- The tray icon now shows the FlowDocks logo instead of a generic
+  "preferences" icon.
+- One tray icon now serves every dock instead of one per dock. A second or
+  third dock previously added its own identical, indistinguishable tray icon;
+  the shared tray's menu now lists each dock so any one of them can be shown
+  or hidden individually, alongside **Show / hide all docks**.
+
 ## [0.7.1] - 2026-09-15
 
 ### Fixed
@@ -145,6 +162,7 @@ Released under the project's former name.
 Initial version: a translucent animated dock with application discovery,
 pinned shortcuts, running-window indicators, preferences and optional autostart.
 
+[0.8.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.8.0
 [0.7.1]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.7.1
 [0.7.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.7.0
 [0.6.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.6.0

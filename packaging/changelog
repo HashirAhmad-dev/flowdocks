@@ -1,3 +1,17 @@
+flowdocks (0.8.0) unstable; urgency=medium
+
+  * Add a Trash icon. Add one with "Add trash icon" in the dock menu, then
+    drag files or folders from a file manager onto it to move them to the
+    desktop trash via the freedesktop Trash spec. It fills and empties to
+    match, click opens the Trash in the file manager, and its menu adds
+    "Empty Trash" and "Remove trash icon".
+  * The tray icon now shows the FlowDocks logo instead of a generic
+    "preferences" icon.
+  * One tray icon now serves every dock instead of one per dock; its menu
+    lists each dock so any one can be shown or hidden individually.
+
+ -- PrismoVector <info@prismovector.com>  Tue, 15 Sep 2026 21:15:00 +0000
+
 flowdocks (0.7.1) unstable; urgency=medium
 
   * Fix separators: only one could ever be kept, because settings validation
