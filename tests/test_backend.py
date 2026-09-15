@@ -154,6 +154,48 @@ class BackendTests(unittest.TestCase):
         self.popen.assert_not_called()
         self.assertEqual(self.run.call_args[0][0], ["xdg-open", "/home/u/docs"])
 
+    def test_open_in_file_manager_handles_a_uri_like_trash(self):
+        # trash:/// is not a filesystem path Path().resolve() can round-trip.
+        self.which.side_effect = lambda n: "/usr/bin/thunar" if n == "thunar" else None
+        b.open_in_file_manager("trash:///")
+        self.assertEqual(self.popen.call_args[0][0], ["/usr/bin/thunar", "trash:///"])
+        self.which.side_effect = lambda n: "/usr/bin/gdbus" if n == "gdbus" else None
+        self.run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
+        b.open_in_file_manager("trash:///")
+        self.assertIn("['trash:///']", self.run.call_args[0][0])
+
+    def test_trash_paths_moves_files_and_reports_failure(self):
+        self.which.side_effect = lambda n: "/usr/bin/gio" if n == "gio" else None
+        self.run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
+        b.trash_paths(["/tmp/a", "/tmp/b"])
+        self.assertEqual(self.run.call_args[0][0], ["/usr/bin/gio", "trash", "--force", "/tmp/a", "/tmp/b"])
+        self.run.return_value = subprocess.CompletedProcess([], 1, b"", b"permission denied")
+        with self.assertRaises(RuntimeError) as caught:
+            b.trash_paths(["/tmp/a"])
+        self.assertIn("permission denied", str(caught.exception))
+
+    def test_trash_paths_without_gio_raises(self):
+        self.which.return_value = None
+        with self.assertRaises(RuntimeError):
+            b.trash_paths(["/tmp/a"])
+
+    def test_empty_trash_calls_gio_and_reports_failure(self):
+        self.which.side_effect = lambda n: "/usr/bin/gio" if n == "gio" else None
+        self.run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
+        b.empty_trash()
+        self.assertEqual(self.run.call_args[0][0], ["/usr/bin/gio", "trash", "--empty"])
+        self.run.return_value = subprocess.CompletedProcess([], 1, b"", b"nope")
+        with self.assertRaises(RuntimeError):
+            b.empty_trash()
+
+    def test_trash_has_contents_reflects_the_home_trash_dir(self):
+        self.assertFalse(b.trash_has_contents())
+        files_dir = self.home / "Trash" / "files"
+        files_dir.mkdir(parents=True)
+        self.assertFalse(b.trash_has_contents())
+        (files_dir / "deleted.txt").write_text("x")
+        self.assertTrue(b.trash_has_contents())
+
     def test_dropped_duplicates_collapse_to_one_app(self):
         installed = self.desktop("dup.desktop")
         apps = b.discover_apps()

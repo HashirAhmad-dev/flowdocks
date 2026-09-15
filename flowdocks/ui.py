@@ -21,10 +21,10 @@ from PyQt6.QtWidgets import (
 )
 from . import panel as desktop_panel
 from .backend import (
-    MAX_DOCKS, PATH_PIN_PREFIX, SEPARATOR, DesktopApp, SettingsStore, activate_window,
-    app_matches_window, application_roots, autostart_enabled, describe_path, discover_apps,
-    launch_app, list_windows, open_in_file_manager, open_path, resolve_dropped_desktops,
-    set_autostart,
+    MAX_DOCKS, PATH_PIN_PREFIX, SEPARATOR, TRASH_TOKEN, DesktopApp, PathPin, SettingsStore,
+    activate_window, app_matches_window, application_roots, autostart_enabled, describe_path,
+    discover_apps, empty_trash, launch_app, list_windows, open_in_file_manager, open_path,
+    resolve_dropped_desktops, set_autostart, trash_has_contents, trash_paths,
 )
 from .x11 import GlobalShortcut, set_window_layer
 
@@ -126,6 +126,27 @@ def app_icon(app: DesktopApp | None = None, name="view-app-grid", fallback="") -
     painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, app.name[:1].upper() if app else "F")
     painter.end()
     return QIcon(pixmap)
+
+
+def brand_icon() -> QIcon:
+    """The FlowDocks logo, for the tray -- not a generic theme icon.
+
+    ``QIcon.fromTheme`` finds it once installed (hicolor is the fallback
+    theme, set in app.py). Running from a source checkout without
+    installing, it is loaded straight from packaging/flowdocks.svg instead.
+    """
+    icon = QIcon.fromTheme("flowdocks")
+    if not icon.isNull():
+        return icon
+    for candidate in (
+        Path(__file__).resolve().parent.parent / "packaging" / "flowdocks.svg",
+        Path("/usr/share/icons/hicolor/scalable/apps/flowdocks.svg"),
+    ):
+        if candidate.is_file():
+            icon = QIcon(str(candidate))
+            if not icon.isNull():
+                return icon
+    return app_icon(name="view-app-grid", fallback="preferences-desktop")
 
 
 def limit_to_one_combination(editor):
@@ -519,19 +540,9 @@ class Dock(QWidget):
         self.poll_busy = False
         self.launch_times = {}
         self.last_mask = None
-        self.tray = QSystemTrayIcon(app_icon(name="preferences-desktop"), self)
-        self.tray.setToolTip("FlowDocks")
-        tray_menu = QMenu()
-        tray_menu.setStyleSheet(DIALOG_STYLE)
-        tray_menu.addAction("Show / hide dock", self.toggle_visibility)
-        tray_menu.addAction("Applications", self.open_picker)
-        tray_menu.addAction("Preferences", self.open_settings)
-        tray_menu.addSeparator()
-        tray_menu.addAction("Quit FlowDocks", QApplication.quit)
-        self.tray.setContextMenu(tray_menu)
-        self.tray.activated.connect(self.tray_activated)
-        if not smoke_test and QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray.show()
+        # One tray icon serves every dock; a bare Dock built without a
+        # manager (as in tests) simply has none.
+        self.tray = self.manager.tray if self.manager is not None else None
         self.timer = QTimer(self)
         self.timer.setInterval(16)
         self.timer.timeout.connect(self.animate)
@@ -565,7 +576,6 @@ class Dock(QWidget):
         self.poll_timer.stop()
         if self.app_watcher is not None:
             self.app_rescan_timer.stop()
-        self.tray.hide()
 
     def configure_shortcut(self, enabled, sequence):
         """One key grab serves every dock, so the manager owns it."""
@@ -633,13 +643,21 @@ class Dock(QWidget):
     def windows_received(self, windows):
         self.poll_busy = False
         self.windows = windows
-        # Also picks up a drive that has just been mounted or unmounted.
+        # Also picks up a drive that has just been mounted or unmounted, and
+        # the Trash icon switching between its empty and full states.
         self.refresh_path_pins()
-        signature = [(entry[0], getattr(entry[1], "id", "")) for entry in self.entries]
-        if signature != [(entry[0], getattr(entry[1], "id", "")) for entry in self.make_entries()[0]]:
+        signature = [(entry[0], getattr(entry[1], "id", ""), getattr(entry[1], "icon", ""))
+                     for entry in self.entries]
+        if signature != [(entry[0], getattr(entry[1], "id", ""), getattr(entry[1], "icon", ""))
+                         for entry in self.make_entries()[0]]:
             if not self.dragging and not self.dock_dragging and not self.external_drag and self.pressed < 0:
                 self.rebuild()
         self.update()
+
+    def trash_pin(self) -> PathPin:
+        full = trash_has_contents()
+        return PathPin(TRASH_TOKEN, "trash:///", "Trash",
+                       "user-trash-full" if full else "user-trash", "user-trash", "trash")
 
     def make_entries(self):
         """Return the entries to draw and, for each, its slot in `pinned`.
@@ -653,6 +671,8 @@ class Dock(QWidget):
         for slot, token in enumerate(pinned):
             if token == SEPARATOR:
                 items.append(("separator", None, slot))
+            elif token == TRASH_TOKEN:
+                items.append(("path", self.trash_pin(), slot))
             elif token in self.catalog:
                 items.append(("app", self.catalog[token], slot))
             elif token.startswith(PATH_PIN_PREFIX) and token in self.path_pins:
@@ -1180,6 +1200,17 @@ class Dock(QWidget):
         self.save_settings()
         self.rebuild()
 
+    def add_trash(self, index=None):
+        pins = self.store.data["pinned"]
+        if TRASH_TOKEN in pins:
+            return
+        pins.insert(len(pins) if index is None else max(0, min(len(pins), index)), TRASH_TOKEN)
+        self.save_settings()
+        self.rebuild()
+
+    def clear_trash(self):
+        self.run_worker(empty_trash, finished=lambda *_: self.rebuild(), failed=self.show_error)
+
     def pinnable(self, token):
         return token in self.catalog or token.startswith(PATH_PIN_PREFIX)
 
@@ -1310,7 +1341,10 @@ class Dock(QWidget):
                 parent = str(Path(pin.path).parent)
                 menu.addAction("Open containing folder",
                                lambda: self.run_worker(open_in_file_manager, parent, failed=self.show_error))
-            menu.addAction("Unpin from dock", lambda: self.remove_pin(slot))
+            if pin.kind == "trash":
+                menu.addAction("Empty Trash", self.clear_trash)
+            menu.addAction("Remove trash icon" if pin.kind == "trash" else "Unpin from dock",
+                           lambda: self.remove_pin(slot))
             menu.addAction("Insert separator here",
                            lambda: self.add_separator(slot if slot is not None else None))
             menu.addSeparator()
@@ -1318,6 +1352,8 @@ class Dock(QWidget):
         menu.addAction("Preferences...", self.open_settings)
         menu.addAction("Refresh applications", self.refresh_apps)
         menu.addAction("Add separator", self.add_separator)
+        if TRASH_TOKEN not in self.store.data["pinned"]:
+            menu.addAction("Add trash icon", self.add_trash)
         menu.addAction("Pin a folder...", lambda: self.browse_for_pin(folder=True))
         menu.addAction("Pin a file...", lambda: self.browse_for_pin(folder=False))
         menu.addAction("Hide dock", self.toggle_visibility)
@@ -1392,7 +1428,7 @@ class Dock(QWidget):
         self.insert_apps([pin.token], len(self.store.data["pinned"]))
 
     def show_error(self, message):
-        if self.tray.isVisible():
+        if self.tray is not None and self.tray.isVisible():
             self.tray.showMessage("FlowDocks", message, QSystemTrayIcon.MessageIcon.Warning, 6000)
         else:
             self.menu_open = True
@@ -1478,10 +1514,6 @@ class Dock(QWidget):
     def open_settings(self):
         self.show_dialog(SettingsDialog)
 
-    def tray_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.open_settings()
-
     def dropped_apps(self, mime):
         """Tokens a drop would pin: installed-app ids, then folder/drive/file pins."""
         if mime.hasFormat(APP_MIME):
@@ -1508,18 +1540,36 @@ class Dock(QWidget):
     def has_local_urls(self, mime):
         return any(url.isLocalFile() for url in mime.urls())
 
+    def trash_drop_target(self, mime, position):
+        """The trash icon's index, when a real file/folder drag is over it."""
+        if mime.hasFormat(APP_MIME) or not self.has_local_urls(mime):
+            return None
+        index = self.hit_test(position)
+        if 0 <= index < len(self.entries):
+            kind, obj = self.entries[index]
+            if kind == "path" and obj.kind == "trash":
+                return index
+        return None
+
     def dragEnterEvent(self, event):
         mime = event.mimeData()
         if not self.dropped_apps(mime) and self.has_local_urls(mime):
             # An app installed since startup is not in the catalogue yet.
             self.rescan_apps_now()
-        if self.dropped_apps(mime):
+        if self.trash_drop_target(mime, event.position()) is not None or self.dropped_apps(mime):
             self.external_drag = True
             self.reveal()
             self.dragMoveEvent(event)
 
     def dragMoveEvent(self, event):
-        if self.dropped_apps(event.mimeData()):
+        mime = event.mimeData()
+        if self.trash_drop_target(mime, event.position()) is not None:
+            self.drop_index = None
+            event.setDropAction(Qt.DropAction.MoveAction)
+            event.accept()
+            self.update()
+            return
+        if self.dropped_apps(mime):
             self.drop_index = self.insertion_index(event.position())
             event.setDropAction(Qt.DropAction.CopyAction)
             event.accept()
@@ -1533,6 +1583,14 @@ class Dock(QWidget):
 
     def dropEvent(self, event):
         mime = event.mimeData()
+        if self.trash_drop_target(mime, event.position()) is not None:
+            paths = [url.toLocalFile() for url in mime.urls() if url.isLocalFile()]
+            self.external_drag = False
+            self.drop_index = None
+            self.run_worker(trash_paths, paths, finished=lambda *_: self.rebuild(), failed=self.show_error)
+            event.setDropAction(Qt.DropAction.MoveAction)
+            event.accept()
+            return
         tokens = self.dropped_apps(mime)
         if not tokens and not mime.hasFormat(APP_MIME) and self.has_local_urls(mime):
             # Last chance: an app installed moments ago may not be catalogued yet.
@@ -1569,9 +1627,44 @@ class DockManager(QObject):
         self.shortcut.activated.connect(self.toggle_all)
         # GlobalShortcut already closes its own display on aboutToQuit. Connecting
         # here too would outlive this manager and fire on a deleted object.
+        self.tray = QSystemTrayIcon(brand_icon(), self)
+        self.tray.setToolTip("FlowDocks")
+        self.tray_menu = QMenu()
+        self.tray_menu.setStyleSheet(DIALOG_STYLE)
+        self.tray_menu.aboutToShow.connect(self.rebuild_tray_menu)
+        self.tray.setContextMenu(self.tray_menu)
+        self.tray.activated.connect(self.tray_activated)
+        if not smoke_test and QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray.show()
+        # Docks reference self.tray via `manager`, so it must exist first.
         self.sync()
         if not smoke_test:
             QTimer.singleShot(0, self.initialise_shortcut)
+
+    def rebuild_tray_menu(self):
+        """Rebuilt every time it opens, so the Docks list is never stale."""
+        menu = self.tray_menu
+        menu.clear()
+        menu.addAction("Show / hide all docks", self.toggle_all)
+        if self.docks:
+            menu.addAction("Applications", self.docks[0].open_picker)
+        menu.addAction("Preferences", self.open_preferences)
+        if len(self.docks) > 1:
+            listing = menu.addMenu(f"Docks ({len(self.docks)} of {MAX_DOCKS})")
+            for dock in self.docks:
+                label = f"Dock {dock.store.index + 1} — {dock.store.data['position'].title()}"
+                action = listing.addAction(
+                    label, lambda checked=False, d=dock: d.toggle_visibility())
+                action.setCheckable(True)
+                action.setChecked(dock.isVisible() and not dock.manual_hidden)
+        add = menu.addAction("Add another dock", self.add_dock)
+        add.setEnabled(len(self.docks) < MAX_DOCKS)
+        menu.addSeparator()
+        menu.addAction("Quit FlowDocks", QApplication.quit)
+
+    def tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.open_preferences()
 
     def sync(self):
         """Create or discard dock widgets so they match the stored list."""
@@ -1640,6 +1733,7 @@ class DockManager(QObject):
 
     def close(self):
         self.shortcut.close()
+        self.tray.hide()
         for dock in self.docks:
             dock.shutdown()
             dock.pool.waitForDone(10000)

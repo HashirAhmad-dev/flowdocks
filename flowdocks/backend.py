@@ -69,6 +69,14 @@ MAX_DOCKS = 5
 # slots are addressed by position rather than by value.
 SEPARATOR = "|"
 
+# A pinned slot holding this draws the Trash icon. The control character can
+# never collide with a desktop-file ID or a "path:" token.
+TRASH_TOKEN = "\x02trash"
+
+# Sentinels are addressed by slot, not value, so several of the same kind may
+# be pinned; only real app-id and path tokens are deduplicated by value.
+PINNED_SENTINELS = {SEPARATOR, TRASH_TOKEN}
+
 # Settings are read from here once if the current directory has none, so an
 # upgrade from the pre-rename releases keeps the user's pins and layout.
 LEGACY_CONFIG_DIR = "nexus-dock"
@@ -573,7 +581,7 @@ def open_in_file_manager(path: str) -> None:
     gdbus = shutil.which("gdbus")
     if gdbus:
         try:
-            uri = Path(path).resolve().as_uri()
+            uri = path if "://" in path else Path(path).resolve().as_uri()
             done = subprocess.run(
                 [gdbus, "call", "--session",
                  "--dest", "org.freedesktop.FileManager1",
@@ -587,6 +595,46 @@ def open_in_file_manager(path: str) -> None:
         except (OSError, ValueError, subprocess.SubprocessError):
             pass
     open_path(path)
+
+
+def trash_paths(paths: list[str]) -> None:
+    """Move files or folders to the desktop trash (freedesktop Trash spec)."""
+    gio = shutil.which("gio")
+    if not gio:
+        raise RuntimeError("Could not move to Trash: 'gio' is not installed.")
+    try:
+        completed = subprocess.run(
+            [gio, "trash", "--force", *paths], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=30, check=False)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise RuntimeError(f"Could not move to Trash: {error}") from error
+    if completed.returncode:
+        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"Could not move to Trash: {detail or 'unknown error'}")
+
+
+def empty_trash() -> None:
+    gio = shutil.which("gio")
+    if not gio:
+        raise RuntimeError("Could not empty Trash: 'gio' is not installed.")
+    try:
+        completed = subprocess.run(
+            [gio, "trash", "--empty"], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=30, check=False)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise RuntimeError(f"Could not empty Trash: {error}") from error
+    if completed.returncode:
+        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"Could not empty Trash: {detail or 'unknown error'}")
+
+
+def trash_has_contents() -> bool:
+    """Best-effort: only the home trash is checked, not other filesystems'."""
+    try:
+        files_dir = _xdg_home("XDG_DATA_HOME", ".local/share") / "Trash" / "files"
+        return files_dir.is_dir() and any(files_dir.iterdir())
+    except OSError:
+        return False
 
 
 def _validated_dock(values: dict) -> dict:
@@ -616,12 +664,10 @@ def _validated_dock(values: dict) -> dict:
             valid = isinstance(value, str) and bool(re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", value))
         elif key == "pinned" and isinstance(value, list):
             cleaned = [item for item in value if isinstance(item, str) and item and "\x00" not in item]
-            # Separators are addressed by slot, not value, so several may exist;
-            # only real app-id / path tokens are deduplicated.
             seen: set[str] = set()
             deduped = []
             for item in cleaned:
-                if item == SEPARATOR or item not in seen:
+                if item in PINNED_SENTINELS or item not in seen:
                     deduped.append(item)
                     seen.add(item)
             data[key] = deduped

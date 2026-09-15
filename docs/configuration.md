@@ -35,6 +35,9 @@ absolute path (for example `path:/home/you/Projects`). It is resolved each time
 the dock rebuilds; if the path is gone — an unmounted drive, a deleted folder —
 the entry is skipped until it exists again.
 
+A single control-character entry marks the Trash icon; it is not meant to be
+typed by hand. Like the separator, it is addressed by position.
+
 ## Shared keys
 
 | Key | Type | Default | Meaning |

@@ -12,11 +12,11 @@ from unittest.mock import patch
 from PyQt6.QtCore import QPoint, QPointF, QRect, Qt, QMimeData, QUrl
 from PyQt6.QtGui import QCursor, QDragEnterEvent, QDropEvent
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QMenu
+from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox
 
 from flowdocks import panel
 from flowdocks.backend import (
-    MAX_DOCKS, PATH_PIN_PREFIX, SEPARATOR, DesktopApp, SettingsStore, WindowInfo,
+    MAX_DOCKS, PATH_PIN_PREFIX, SEPARATOR, TRASH_TOKEN, DesktopApp, SettingsStore, WindowInfo,
 )
 from flowdocks.ui import APP_MIME, DockManager, AppPicker, Dock, SettingsDialog, limit_to_one_combination
 
@@ -367,6 +367,67 @@ class DockTests(unittest.TestCase):
         self.settings.data["pinned"].append(PATH_PIN_PREFIX + "/no/such/place/xyz")
         self.dock.rebuild()
         self.assertNotIn("path", [kind for kind, _ in self.dock.entries])
+
+    def test_add_trash_icon_is_idempotent_and_reflects_contents(self):
+        self.dock.add_trash()
+        self.dock.add_trash()
+        self.assertEqual(self.settings.data["pinned"].count(TRASH_TOKEN), 1)
+        trash = next(obj for kind, obj in self.dock.entries if kind == "path" and obj.kind == "trash")
+        self.assertEqual(trash.name, "Trash")
+        with patch("flowdocks.ui.trash_has_contents", return_value=True):
+            self.dock.rebuild()
+        full = next(obj for kind, obj in self.dock.entries if kind == "path" and obj.kind == "trash")
+        self.assertEqual(full.icon, "user-trash-full")
+        with patch("flowdocks.ui.trash_has_contents", return_value=False):
+            self.dock.rebuild()
+        empty = next(obj for kind, obj in self.dock.entries if kind == "path" and obj.kind == "trash")
+        self.assertEqual(empty.icon, "user-trash")
+
+    def test_dropping_a_file_onto_trash_trashes_it_instead_of_pinning(self):
+        self.dock.add_trash()
+        target = Path(self.directory.name) / "delete-me.txt"
+        target.write_text("x")
+        trash_index = next(i for i, (kind, obj) in enumerate(self.dock.entries)
+                           if kind == "path" and obj.kind == "trash")
+        point = self.dock.rects[trash_index].center()
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(target))])
+        pinned_before = list(self.settings.data["pinned"])
+        with patch("flowdocks.ui.trash_paths") as trasher:
+            event = QDropEvent(point, Qt.DropAction.CopyAction, mime,
+                               Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+            self.dock.dropEvent(event)
+            self.dock.pool.waitForDone()
+        self.assertTrue(event.isAccepted())
+        trasher.assert_called_once_with([str(target)])
+        self.assertEqual(self.settings.data["pinned"], pinned_before)
+
+    def test_trash_menu_offers_empty_and_remove_not_unpin(self):
+        self.dock.add_trash()
+        index = next(i for i, (kind, obj) in enumerate(self.dock.entries)
+                     if kind == "path" and obj.kind == "trash")
+        captured = {}
+        with patch.object(QMenu, "exec", lambda menu, *a, **kw: captured.setdefault("menu", menu)):
+            self.dock.open_menu(QPoint(0, 0), index)
+        labels = [action.text() for action in captured["menu"].actions()]
+        self.assertIn("Empty Trash", labels)
+        self.assertIn("Remove trash icon", labels)
+        self.assertNotIn("Unpin from dock", labels)
+
+    def test_clicking_trash_opens_the_file_manager_on_the_trash_uri(self):
+        self.dock.add_trash()
+        trash = next(obj for kind, obj in self.dock.entries if kind == "path" and obj.kind == "trash")
+        with patch("flowdocks.ui.open_in_file_manager") as fm, patch("flowdocks.ui.open_path") as default:
+            self.dock.open_pin(trash)
+            self.dock.pool.waitForDone()
+        fm.assert_called_once_with("trash:///")
+        default.assert_not_called()
+
+    def test_clear_trash_calls_the_backend(self):
+        with patch("flowdocks.ui.empty_trash") as emptier:
+            self.dock.clear_trash()
+            self.dock.pool.waitForDone()
+        emptier.assert_called_once_with()
 
     def test_overflow_keeps_geometry_on_screen(self):
         self.dock.apps = [DesktopApp(f"app{i}.desktop", f"App {i}", f"app{i}") for i in range(100)]
@@ -720,6 +781,35 @@ class DockManagerTests(unittest.TestCase):
         with patch.object(self.manager, "configure_shortcut", return_value=True) as configure:
             self.manager.docks[1].configure_shortcut(True, "Ctrl+Alt+J")
             configure.assert_not_called()  # smoke_test docks short-circuit
+
+    def test_one_tray_icon_is_shared_by_every_dock(self):
+        self.manager.add_dock()
+        self.quiet(self.manager.docks)
+        first, second = self.manager.docks
+        self.assertIsNotNone(self.manager.tray)
+        self.assertIs(first.tray, self.manager.tray)
+        self.assertIs(second.tray, self.manager.tray)
+
+    def test_tray_menu_lists_docks_once_there_is_more_than_one(self):
+        self.manager.rebuild_tray_menu()
+        labels = [a.text() for a in self.manager.tray_menu.actions()]
+        self.assertIn("Show / hide all docks", labels)
+        self.assertFalse(any("Docks (" in label for label in labels))
+        self.manager.add_dock()
+        self.quiet(self.manager.docks)
+        self.manager.rebuild_tray_menu()
+        top_labels = [a.text() for a in self.manager.tray_menu.actions()]
+        docks_menu = next(a.menu() for a in self.manager.tray_menu.actions() if a.menu() and "Docks" in a.text())
+        self.assertIn("Docks (2 of 5)", top_labels)
+        self.assertEqual(len(docks_menu.actions()), 2)
+
+    def test_a_bare_dock_without_a_manager_has_no_tray(self):
+        dock = Dock(SettingsStore(Path(self.directory.name) / "solo").dock(0), smoke_test=True)
+        self.addCleanup(dock.deleteLater)
+        self.assertIsNone(dock.tray)
+        with patch.object(QMessageBox, "warning") as warning:
+            dock.show_error("falls back to a message box instead of crashing on tray=None")
+        warning.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()

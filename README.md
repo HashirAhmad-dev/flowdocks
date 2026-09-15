@@ -27,9 +27,13 @@ desktops.
   it to unpin.
 - **Separators** group icons the way Nexus Dock does. Add one from the dock menu,
   drag it anywhere along the dock, and drag it off to remove it.
+- **A Trash icon** — add one from the dock menu, then drag files or folders from
+  a file manager straight onto it to move them to the desktop trash. It fills
+  and empties to match, and its own menu offers **Empty Trash**.
 - **Up to five docks at once**, each with its own pinned apps, edge, orientation,
   theme, size and layer. Add or remove them from the Docks menu; one shortcut
-  shows and hides them all.
+  shows and hides them all, and one tray icon manages all of them, not one per
+  dock.
 - **Place it anywhere** — snap to any screen edge on any monitor, or switch to
   free positioning and drop it wherever you like, rotated horizontally or
   vertically.

@@ -50,6 +50,17 @@ the dock, or with **Remove separator** from its own right-click menu. Separators
 do not magnify on hover, and several can be used in one dock — each is tracked by
 its position, so removing one never removes a different one.
 
+## Trash
+
+Add a Trash icon with **Add trash icon** from the dock menu (it greys out once
+one is already pinned). Drag a file or folder from a file manager onto it to
+move it to the desktop trash — the same freedesktop Trash your file manager
+uses, so it is fully recoverable there. The icon fills and empties to match.
+
+Click it to open the Trash in your file manager. Its right-click menu adds
+**Empty Trash**, and **Remove trash icon** takes it off the dock without
+touching anything already in the trash.
+
 ## Multiple docks
 
 FlowDocks runs up to **five docks at once**. Each is fully independent: its own
@@ -63,8 +74,9 @@ Use the **Docks** submenu in any dock's right-click menu:
 - **Remove this dock** — removes the dock you opened the menu from. The last
   remaining dock cannot be removed; quit FlowDocks instead.
 
-What the docks share is the global shortcut, the tray icon, and the `--toggle`
-and `--preferences` commands, all of which act on every dock at once. Preferences
+What the docks share is one tray icon, the global shortcut, and the `--toggle`
+and `--preferences` commands, all of which act on every dock at once (the tray
+menu also lists each dock so you can show or hide one individually). Preferences
 opened from a dock edits that dock, except the shortcut, which is shared.
 
 Only the first dock shows applications that are running but not pinned to it;
