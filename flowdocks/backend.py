@@ -331,7 +331,16 @@ def app_matches_window(app: DesktopApp, window: WindowInfo) -> bool:
             while command and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", command[0]):
                 command.pop(0)
             executable = Path(command[0]).name.casefold() if command and not command[0].startswith("-") else ""
-        if executable and executable not in {"sh", "bash", "dash", "zsh", "env", "flatpak", "snap", "java", "node", "perl", "ruby"} and not executable.startswith("python"):
+        # A browser launched in --app/--app-id mode opens one specific window
+        # that only StartupWMClass identifies reliably; adding the bare
+        # executable here would also match the browser's own regular windows
+        # and every other installed-page app it hosts -- which is how a
+        # pinned "install this page as an app" shortcut ends up activating
+        # whatever browser window happens to already be open.
+        app_mode = any(token.startswith(("--app=", "--app-id=")) for token in command[1:])
+        if (executable and not app_mode
+                and executable not in {"sh", "bash", "dash", "zsh", "env", "flatpak", "snap", "java", "node", "perl", "ruby"}
+                and not executable.startswith("python")):
             identities.add(executable)
     except ValueError:
         pass
@@ -606,7 +615,16 @@ def _validated_dock(values: dict) -> dict:
         elif key == "theme":
             valid = isinstance(value, str) and bool(re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", value))
         elif key == "pinned" and isinstance(value, list):
-            data[key] = list(dict.fromkeys(item for item in value if isinstance(item, str) and item and "\x00" not in item))
+            cleaned = [item for item in value if isinstance(item, str) and item and "\x00" not in item]
+            # Separators are addressed by slot, not value, so several may exist;
+            # only real app-id / path tokens are deduplicated.
+            seen: set[str] = set()
+            deduped = []
+            for item in cleaned:
+                if item == SEPARATOR or item not in seen:
+                    deduped.append(item)
+                    seen.add(item)
+            data[key] = deduped
         if valid:
             data[key] = value
     return data

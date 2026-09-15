@@ -404,6 +404,25 @@ class BackendTests(unittest.TestCase):
         wrapped.exec_line = "python3 /opt/example.py"
         self.assertFalse(b.app_matches_window(wrapped, b.WindowInfo("1", "", "python3")))
 
+    def test_installed_page_apps_do_not_match_the_hosting_browsers_own_windows(self):
+        # A Chrome/Chromium "install this page as an app" shortcut shares its
+        # executable with the plain browser and every other page installed
+        # that way; only StartupWMClass may identify its own window.
+        gemini = b.DesktopApp(
+            "chrome-abc-Default.desktop", "Google Gemini",
+            "/usr/bin/chromium --profile-directory=Default --app-id=abc",
+            startup_wm_class="crx_abc")
+        browser_window = b.WindowInfo("1", "GitHub - Chromium", "chromium, Chromium")
+        other_app_window = b.WindowInfo("2", "Docs", "crx_other, Chromium")
+        own_window = b.WindowInfo("3", "Google Gemini", "crx_abc, Chromium")
+        self.assertFalse(b.app_matches_window(gemini, browser_window))
+        self.assertFalse(b.app_matches_window(gemini, other_app_window))
+        self.assertTrue(b.app_matches_window(gemini, own_window))
+        # The plain browser launcher (no --app/--app-id) still matches its
+        # own windows by executable name, same as any regular application.
+        browser = b.DesktopApp("chromium.desktop", "Chromium Web Browser", "/usr/bin/chromium %U")
+        self.assertTrue(b.app_matches_window(browser, browser_window))
+
     def test_default_pins_roles_and_no_duplicates(self):
         apps = [b.DesktopApp(name + ".desktop", name, name) for name in
                 ("chromium", "firefox", "thunar", "kitty", "code", "gnome-control-center")]
@@ -498,6 +517,16 @@ class BackendTests(unittest.TestCase):
         (self.config / "settings.json").write_text(json.dumps(values), encoding="utf-8")
         store = b.SettingsStore(self.config)
         self.assertEqual(store.dock(0).data, {**b.DEFAULT_DOCK, "pinned": ["app.desktop"]})
+
+    def test_several_separators_survive_validation(self):
+        # dict.fromkeys used to collapse every "|" to one on the first save.
+        self.config.mkdir()
+        values = {"pinned": ["a.desktop", b.SEPARATOR, "b.desktop", b.SEPARATOR,
+                             b.SEPARATOR, "a.desktop"]}
+        (self.config / "settings.json").write_text(json.dumps(values), encoding="utf-8")
+        store = b.SettingsStore(self.config)
+        self.assertEqual(store.dock(0).data["pinned"],
+                         ["a.desktop", b.SEPARATOR, "b.desktop", b.SEPARATOR, b.SEPARATOR])
 
     def test_corrupt_settings_and_relative_xdg_fallback(self):
         self.config.mkdir()

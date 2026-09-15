@@ -14,7 +14,9 @@
 
 Dots beneath an icon show how many windows that application has open, up to
 three. Applications that are running but not pinned appear next to your pinned
-ones for as long as they are open.
+ones for as long as they are open -- on the first dock only, so a second or
+third dock (see [Multiple docks](#multiple-docks)) shows exactly what is
+pinned to it instead of every running app on the system.
 
 When the screen is too narrow for everything, the dock stops adding icons rather
 than running off the edge; the rest stay reachable in the application picker.
@@ -64,6 +66,11 @@ Use the **Docks** submenu in any dock's right-click menu:
 What the docks share is the global shortcut, the tray icon, and the `--toggle`
 and `--preferences` commands, all of which act on every dock at once. Preferences
 opened from a dock edits that dock, except the shortcut, which is shared.
+
+Only the first dock shows applications that are running but not pinned to it;
+a second, third, fourth or fifth dock shows only what is actually pinned to it
+(plus a running-window dot on any of those that happen to be open), so adding
+more docks does not multiply the same clutter across all of them.
 
 ## Placing the dock
 

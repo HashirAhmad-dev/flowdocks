@@ -90,6 +90,25 @@ class DockTests(unittest.TestCase):
         self.assertNotIn("editor.desktop", [app.id for kind, app in self.dock.entries if kind == "app"])
         self.assertFalse(self.store.path.exists())
 
+    def test_only_the_first_dock_shows_unpinned_running_apps(self):
+        self.store.add_dock()
+        settings2 = self.store.dock(1)
+        settings2.data["pinned"] = ["terminal.desktop"]
+        with patch("flowdocks.ui.discover_apps", return_value=self.apps), patch.object(Dock, "poll_windows"):
+            dock2 = Dock(settings2, smoke_test=True)
+        self.addCleanup(dock2.deleteLater)
+        dock2.timer.stop()
+        dock2.poll_timer.stop()
+        self.assertEqual(dock2.store.index, 1)
+        # A running app that is pinned nowhere on this second dock: the first
+        # dock would surface it, this one must not.
+        dock2.windows = [WindowInfo("0x1", "Notes", "editor")]
+        dock2.rebuild()
+        self.assertEqual([app.id for kind, app in dock2.entries if kind == "app"], ["terminal.desktop"])
+        # The primary dock is unaffected and still surfaces the same window.
+        self.dock.windows_received([WindowInfo("0x1", "Notes", "editor")])
+        self.assertIn("editor.desktop", [app.id for kind, app in self.dock.entries if kind == "app"])
+
     def test_drag_reorders_pins(self):
         first = self.dock.rects[1].center().toPoint()
         second = self.dock.rects[2].center().toPoint()

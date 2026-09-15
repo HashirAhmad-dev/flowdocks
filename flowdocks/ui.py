@@ -657,13 +657,18 @@ class Dock(QWidget):
                 items.append(("app", self.catalog[token], slot))
             elif token.startswith(PATH_PIN_PREFIX) and token in self.path_pins:
                 items.append(("path", self.path_pins[token], slot))
-        claimed = {window.id for window in self.windows
-                   if any(app_matches_window(app, window) for kind, app, _ in items if kind == "app")}
-        for app in self.apps:
-            matches = {window.id for window in self.windows if app_matches_window(app, window)}
-            if app.id not in pinned and matches - claimed:
-                items.append(("app", app, None))
-                claimed.update(matches)
+        # Window state is system-wide, so every dock would otherwise surface
+        # the same unpinned running apps -- cluttering a second or third dock
+        # that only has a handful of things pinned to it. Only the first dock
+        # picks up the slack; the rest show exactly what is pinned to them.
+        if self.store.index == 0:
+            claimed = {window.id for window in self.windows
+                       if any(app_matches_window(app, window) for kind, app, _ in items if kind == "app")}
+            for app in self.apps:
+                matches = {window.id for window in self.windows if app_matches_window(app, window)}
+                if app.id not in pinned and matches - claimed:
+                    items.append(("app", app, None))
+                    claimed.update(matches)
         screen = self.selected_screen().geometry()
         extent = screen.width() if self.horizontal else screen.height()
         # Leave enough space for magnification and the three built-in controls.
