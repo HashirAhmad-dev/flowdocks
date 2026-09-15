@@ -7,6 +7,23 @@ changelog at `packaging/changelog` carries the same history.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-15
+
+### Fixed
+- Only one separator could ever be kept: settings validation deduplicated the
+  whole `pinned` list by value on every save, and every separator has the same
+  value. Separators are now deduplicated by position instead, so several can
+  be pinned and each is still removed independently.
+- A second or third dock showed every running-but-unpinned application on the
+  system, not just its own pins, because each dock independently added the
+  same system-wide running apps. Only the first dock now does that; additional
+  docks show exactly what is pinned to them.
+- A "Chrome/Chromium install this page as an app" shortcut could activate
+  whatever ordinary browser window (or a different installed page) happened to
+  be open instead of itself, because its window was matched by the shared
+  browser executable name in addition to `StartupWMClass`. A browser launched
+  in `--app`/`--app-id` mode is now matched only by `StartupWMClass`.
+
 ## [0.7.0] - 2026-09-08
 
 ### Added
@@ -128,6 +145,7 @@ Released under the project's former name.
 Initial version: a translucent animated dock with application discovery,
 pinned shortcuts, running-window indicators, preferences and optional autostart.
 
+[0.7.1]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.7.1
 [0.7.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.7.0
 [0.6.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.6.0
 [0.5.0]: https://github.com/HashirAhmad-dev/flowdocks/releases/tag/v0.5.0

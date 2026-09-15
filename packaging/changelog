@@ -1,3 +1,18 @@
+flowdocks (0.7.1) unstable; urgency=medium
+
+  * Fix separators: only one could ever be kept, because settings validation
+    deduplicated the pinned list by value on every save and every separator
+    has the same value. They are now deduplicated by position instead.
+  * Fix a second or third dock showing every running-but-unpinned application
+    on the system rather than just its own pins. Only the first dock does
+    that now; additional docks show exactly what is pinned to them.
+  * Fix a "Chrome/Chromium install this page as an app" shortcut sometimes
+    activating an ordinary browser window, or a different installed page,
+    instead of itself. A browser launched in --app/--app-id mode is now
+    matched only by StartupWMClass, not by its shared executable name.
+
+ -- PrismoVector <info@prismovector.com>  Tue, 15 Sep 2026 20:30:00 +0000
+
 flowdocks (0.7.0) unstable; urgency=medium
 
   * Pin folders, drives and files. Drag one from a file manager onto the dock,
